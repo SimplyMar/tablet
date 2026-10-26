@@ -70,12 +70,14 @@ export function createHero(face: ReturnType<typeof createFace>) {
     host,
     showHeadline(i = idx) {
       idx = (i + HEADLINES.length) % HEADLINES.length;
+      host.parentElement?.removeAttribute('data-big');
       face.set('idle');
       return swap(headlineLayer(HEADLINES[idx]));
     },
     nextHeadline() { return api.showHeadline(idx + 1); },
-    say(title: string, text: string, opts: { who?: string; state?: FaceState; hold?: number } = {}) {
+    say(title: string, text: string, opts: { who?: string; state?: FaceState; hold?: number; big?: boolean } = {}) {
       clearTimeout(speaking);
+      host.parentElement?.toggleAttribute('data-big', !!opts.big);
       face.set(opts.state ?? 'speak');
       swap(sayLayer(title, text, opts.who));
       if (opts.hold) speaking = window.setTimeout(() => api.showHeadline(), opts.hold);

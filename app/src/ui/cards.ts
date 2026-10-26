@@ -3,6 +3,7 @@ import { icon, filled, type IconName } from '../lib/icons';
 import { artUrl } from './art';
 import { player, playerActions } from '../lib/player';
 import { CITIES, DECK, EVENTS, TUMRA } from '../data/mock';
+import { breakTimer, mmss, BREAK_SECONDS } from '../lib/timer';
 import { dayShort, hm, monthName, now, pad, WIB, zoned, dayName, monthShort } from '../lib/time';
 
 export type Card = { el: HTMLElement; update?: () => void };
@@ -64,7 +65,13 @@ export function timerCard(opts: { onStart: () => void }): Card {
   const sub = h('div', { class: 'sub' }, '0 hari ini');
   const btn = h('button', { class: 'pill-btn', onClick: opts.onStart }, 'Mulai');
   const el = card('timer', 'timer', h('div', { class: 'label' }, 'Istirahat'), big, sub, btn);
-  return { el, update: () => undefined };
+  const update = () => {
+    const s = breakTimer.get();
+    big.textContent = mmss(s.remaining); sub.textContent = `${s.done} hari ini`;
+    btn.textContent = s.running ? 'Jeda' : s.remaining < BREAK_SECONDS ? 'Lanjut' : 'Mulai';
+  };
+  update(); breakTimer.on(update);
+  return { el, update };
 }
 
 export function calendarCard(opts: { onOpen: () => void }): Card {
