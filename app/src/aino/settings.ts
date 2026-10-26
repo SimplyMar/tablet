@@ -1,10 +1,17 @@
 import { getSecret, setSecret, removeSecret } from '../native/bridge';
 
+export const DEFAULT_MODEL = 'gemini-3.8-flash';
+
 export type Prefs = { name: string; model: string; speak: boolean; awake: boolean };
-const DEFAULTS: Prefs = { name: 'isni', model: 'gemini-2.5-flash', speak: true, awake: true };
+const DEFAULTS: Prefs = { name: 'isni', model: DEFAULT_MODEL, speak: true, awake: true };
 
 export function loadPrefs(): Prefs {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('aino.prefs') ?? '{}') }; } catch { return { ...DEFAULTS }; }
+  try {
+    const p: Prefs = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('aino.prefs') ?? '{}') };
+    // Google retired the 2.x flash models for new keys; move old saved choices to the current default.
+    if (/^gemini-[12]\./.test(p.model)) p.model = DEFAULT_MODEL;
+    return p;
+  } catch { return { ...DEFAULTS }; }
 }
 export function savePrefs(p: Partial<Prefs>) {
   const next = { ...loadPrefs(), ...p };

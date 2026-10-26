@@ -1,7 +1,7 @@
 import { h } from '../lib/h';
 import { icon, type IconName } from '../lib/icons';
 import { EASE_OUT, EASE_IN } from '../lib/motion';
-import { loadPrefs, savePrefs, getGeminiKey, setGeminiKey, clearGeminiKey } from '../aino/settings';
+import { DEFAULT_MODEL, loadPrefs, savePrefs, getGeminiKey, setGeminiKey, clearGeminiKey } from '../aino/settings';
 import { ask, resetHistory, type Reply } from '../aino/brain';
 import { canListen, isNative, listen, nowPlaying, notificationStatus, openApp, openAppSettings, openNotificationAccessSettings, speak, stopSpeaking } from '../native/bridge';
 import { weather, refreshWeather, savePlace, searchPlaces } from '../lib/weather';
@@ -91,7 +91,7 @@ export function settingsPanel(onClose: () => void): Panel {
 
   const save = h('button', { class: 'pill-dark', onClick: async () => {
     if (key.value.trim()) { await setGeminiKey(key.value); key.value = ''; }
-    savePrefs({ model: model.value.trim() || 'gemini-2.5-flash', name: name.value.trim() || 'isni' });
+    savePrefs({ model: model.value.trim() || DEFAULT_MODEL, name: name.value.trim() || 'isni' });
     await refreshKey(); save.textContent = 'Tersimpan'; setTimeout(() => (save.textContent = 'Simpan'), 1400);
   } }, 'Simpan');
   const clear = h('button', { class: 'pill-ghost', onClick: async () => { await clearGeminiKey(); await refreshKey(); } }, 'Hapus kunci');

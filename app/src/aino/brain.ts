@@ -1,6 +1,6 @@
 import { CapacitorHttp } from '@capacitor/core';
 import { isNative } from '../native/bridge';
-import { getGeminiKey, loadPrefs } from './settings';
+import { DEFAULT_MODEL, getGeminiKey, loadPrefs, savePrefs } from './settings';
 import { player } from '../lib/player';
 import { CITIES, EVENTS } from '../data/mock';
 import { weather } from '../lib/weather';
@@ -64,30 +64,64 @@ export const resetHistory = () => { history.length = 0; };
 export class NoKeyError extends Error { constructor() { super('no-key'); } }
 export class GeminiError extends Error { constructor(public status: number, msg: string) { super(msg); } }
 
-async function callGemini(text: string): Promise<string> {
-  const key = await getGeminiKey();
-  if (!key) throw new NoKeyError();
-  const { model } = loadPrefs();
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+const API = 'https://generativelanguage.googleapis.com/v1beta';
+
+async function request(url: string, key: string, body?: unknown): Promise<{ status: number; data: unknown }> {
+  const headers = { 'Content-Type': 'application/json', 'x-goog-api-key': key };
+  if (isNative) {
+    const r = body === undefined ? await CapacitorHttp.get({ url, headers }) : await CapacitorHttp.post({ url, headers, data: body });
+    return { status: r.status, data: r.data };
+  }
+  const r = await fetch(url, body === undefined ? { headers } : { method: 'POST', headers, body: JSON.stringify(body) });
+  return { status: r.status, data: await r.json().catch(() => null) };
+}
+
+const errorMessage = (data: unknown, status: number) => (data as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${status}`;
+
+/** The model was retired or never existed for this key; worth asking Google which ones are live. */
+const isGone = (e: GeminiError) => e.status === 404 || /no longer available|not found|not supported/i.test(e.message);
+
+/** Newest plain "flash" model this key can call, e.g. gemini-3.8-flash. */
+async function discoverModel(key: string): Promise<string | null> {
+  const { status, data } = await request(`${API}/models?pageSize=200`, key);
+  if (status < 200 || status >= 300) return null;
+  const list = (data as { models?: { name?: string; supportedGenerationMethods?: string[] }[] } | null)?.models ?? [];
+  const ver = (id: string) => (id.match(/^gemini-(\d+(?:\.\d+)?)-flash$/)?.[1] ?? '');
+  const ids = list
+    .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+    .map((m) => (m.name ?? '').replace(/^models\//, ''))
+    .filter((id) => ver(id));
+  ids.sort((a, b) => parseFloat(ver(b)) - parseFloat(ver(a)));
+  return ids[0] ?? null;
+}
+
+async function generate(key: string, model: string, text: string): Promise<string> {
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt() }] },
     contents: [...history.slice(-8), { role: 'user', text }].map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
     generationConfig: { temperature: 0.7, maxOutputTokens: 220 },
   };
-  const headers = { 'Content-Type': 'application/json', 'x-goog-api-key': key };
-  let status: number; let data: unknown;
-  if (isNative) {
-    const r = await CapacitorHttp.post({ url, headers, data: body }); status = r.status; data = r.data;
-  } else {
-    const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) }); status = r.status; data = await r.json().catch(() => null);
-  }
-  if (status < 200 || status >= 300) {
-    const msg = (data as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${status}`;
-    throw new GeminiError(status, msg);
-  }
+  const { status, data } = await request(`${API}/models/${encodeURIComponent(model)}:generateContent`, key, body);
+  if (status < 200 || status >= 300) throw new GeminiError(status, errorMessage(data, status));
   const out = (data as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim();
   if (!out) throw new GeminiError(200, 'Jawaban kosong');
   return out;
+}
+
+async function callGemini(text: string): Promise<string> {
+  const key = await getGeminiKey();
+  if (!key) throw new NoKeyError();
+  const { model } = loadPrefs();
+  try {
+    return await generate(key, model, text);
+  } catch (e) {
+    if (!(e instanceof GeminiError) || !isGone(e)) throw e;
+    const next = await discoverModel(key).catch(() => null);
+    if (!next || next === model) throw e;
+    const out = await generate(key, next, text);
+    savePrefs({ model: next });
+    return out;
+  }
 }
 
 export async function ask(text: string): Promise<Reply> {
