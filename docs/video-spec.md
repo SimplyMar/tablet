@@ -24,3 +24,19 @@ Date header; mode toggle (grid, briefcase, home, coffee); icons for volume, apps
 
 ## Not shown in the video
 Home and coffee mode contents, apps grid, notifications, more menu, settings, chat panel. These will be designed in the same style.
+
+## Motion spec (measured by frame-stepping at 10-15 fps)
+
+All timings are from the video. Easing is an exponential ease-out unless noted.
+
+| Moment | What happens | Duration |
+|---|---|---|
+| Headline carousel | Old title and meta fade out with a slight blur (about 170 ms), new title fades in (about 250 ms). The robot face blinks (eyes squash to a line for about 80 ms) right after. | ~420 ms |
+| Mode switch (home to work and back) | The active pill slides to the new segment. The greeting text swaps. Every widget fades out together, blank card surfaces appear in the new layout, then card surfaces and their contents fade in staggered about 50 ms apart (navigation or clock first, deck last). | ~750 ms |
+| Overlay open (music, world clock, calendar) | The home screen blurs, dims and shrinks slightly. The overlay panel arrives from slightly smaller and blurred and settles. A small Aino face with a speech bubble sits at the bottom-left, then fades out after about 500 ms. | ~280 ms |
+| Overlay close | The panel shrinks and slides down toward the bottom while fading and blurring. Home comes back with blank card surfaces first, then contents, staggered. | ~450 ms close, ~300 ms return |
+| Face states | Idle: two rounded eyes. Speaking: eyes plus a short dash mouth. Listening: green mic button, eyes plus waveform bars, status line "Mendengarkan". | |
+| Deck keys | Pressed key tints pale green for about 150 ms. | 150 ms |
+| Music ring | Progress ring plus rotating album art while playing; track change swaps the art and the now-playing pill. | |
+
+The Android status bar visible during listening in the video belongs to the OS, so the app does not draw it.

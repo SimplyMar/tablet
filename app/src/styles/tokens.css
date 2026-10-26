@@ -1,0 +1,40 @@
+@import '@fontsource-variable/inter/index.css';
+
+:root {
+  --stage-w: 1152px;
+  --stage-h: 718px;
+
+  /* surfaces sampled from the reference frames */
+  --bg-1: #e4e8ec;
+  --bg-2: #dae0e3;
+  --bg-3: #edf1f5;
+  --card: rgba(247, 248, 250, 0.86);
+  --card-edge: rgba(255, 255, 255, 0.78);
+  --card-solid: #f3f4f7;
+  --inner: rgba(255, 255, 255, 0.72);
+  --ink: #0d1115;
+  --ink-2: #4d535b;
+  --ink-3: #7b828a;
+  --line: #e3e6ea;
+  --dark: #111418;
+  --robot: #0d1115;
+  --mint: #4bf3d4;
+  --green: #2c7a6b;
+  --green-soft: #dff0e6;
+  --rose: #d6244a;
+
+  --r-card: 28px;
+  --r-inner: 18px;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 10px 28px -14px rgba(40, 52, 66, 0.22), 0 1px 3px rgba(40, 52, 66, 0.06);
+  --shadow-float: 0 24px 60px -22px rgba(30, 42, 56, 0.35), 0 2px 6px rgba(30, 42, 56, 0.08);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+
+  font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  font-feature-settings: 'tnum' 1, 'cv11' 1, 'ss03' 1;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}

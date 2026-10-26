@@ -1,0 +1,17 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: #dfe4e8; overscroll-behavior: none; }
+body { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.ic { display: block; flex: none; }
+::selection { background: rgba(44, 122, 107, 0.22); }
+:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+button:focus:not(:focus-visible) { outline: none; }
+
+#viewport {
+  position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden;
+  background:
+    radial-gradient(900px 520px at 18% -8%, #f1f4f7 0%, transparent 62%),
+    radial-gradient(800px 600px at 96% 100%, #f2f6fa 0%, transparent 58%),
+    linear-gradient(160deg, var(--bg-1) 0%, var(--bg-2) 46%, var(--bg-3) 100%);
+}
+#stage { position: relative; width: var(--stage-w); height: var(--stage-h); flex: none; transform-origin: center; }
