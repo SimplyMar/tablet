@@ -1,0 +1,8 @@
+{
+  "appId": "id.simplymar.tablet",
+  "appName": "Aino Dash",
+  "webDir": "dist",
+  "backgroundColor": "#dfe4e8",
+  "android": { "allowMixedContent": false },
+  "plugins": { "CapacitorHttp": { "enabled": true } }
+}

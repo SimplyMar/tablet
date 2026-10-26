@@ -16,15 +16,25 @@ export const player = createStore<PlayerState>({
 
 const clampIdx = (i: number) => (i + QUEUE.length) % QUEUE.length;
 
+/** When a real media session is attached, transport commands go to it instead of the mock queue. */
+export type DeviceControl = (action: 'toggle' | 'next' | 'previous' | 'seek', position?: number) => void;
+let device: DeviceControl | null = null;
+export const attachDevice = (fn: DeviceControl | null) => { device = fn; };
+
 export const playerActions = {
-  toggle() { player.set({ playing: !player.get().playing }); },
+  toggle() { if (device && player.get().source === 'device') { device('toggle'); return; } player.set({ playing: !player.get().playing }); },
   go(delta: number) {
+    if (device && player.get().source === 'device') { device(delta > 0 ? 'next' : 'previous'); return; }
     const i = clampIdx(player.get().index + delta);
     player.set({ index: i, track: QUEUE[i], position: 0, playing: true });
   },
   next() { this.go(1); },
-  prev() { if (player.get().position > 4) player.set({ position: 0 }); else this.go(-1); },
-  seek(fraction: number) { const t = player.get().track; player.set({ position: Math.round(t.length * fraction) }); },
+  prev() { if (player.get().position > 4 && !(device && player.get().source === 'device')) player.set({ position: 0 }); else this.go(-1); },
+  seek(fraction: number) {
+    const t = player.get().track; const pos = Math.round(t.length * fraction);
+    if (device && player.get().source === 'device') device('seek', pos);
+    player.set({ position: pos });
+  },
   volume(v: number) { player.set({ volume: Math.min(1, Math.max(0, v)) }); },
   setLight(light: LightMode) { player.set({ light }); },
   toggleShuffle() { player.set({ shuffle: !player.get().shuffle }); },
@@ -37,7 +47,7 @@ setInterval(() => {
   const dt = (nowT - last) / 1000;
   last = nowT;
   const s = player.get();
-  if (!s.playing || DEMO) return;
+  if (!s.playing || DEMO || s.source === 'device') return;
   const pos = s.position + dt;
   if (pos >= s.track.length) playerActions.next();
   else player.set({ position: pos });

@@ -6,7 +6,7 @@ export const HEADLINES: Headline[] = [
   { title: 'Trump Isyaratkan Operasi Militer Baru AS terhadap Iran', section: 'Berita utama Indonesia', source: 'detikNews', ago: '7 jam lalu', tag: 'Berita' },
 ];
 
-export type Track = { title: string; artist: string; art: 'smoke' | 'ember' | 'glass' | 'bloom'; length: number };
+export type Track = { title: string; artist: string; art: string; length: number };
 
 export const QUEUE: Track[] = [
   { title: 'Breathe No More (B-Side Version)', artist: 'Evanescence', art: 'smoke', length: 228 },

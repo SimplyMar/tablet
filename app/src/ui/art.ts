@@ -30,7 +30,9 @@ function wisps(seed: number, color: string, count: number, minW: number, maxW: n
   return d;
 }
 
-export function artUrl(kind: keyof typeof PALETTES): string {
+export function artUrl(input: string): string {
+  if (input.startsWith('data:')) return `url("${input}")`;
+  const kind = (input in PALETTES ? input : 'smoke') as keyof typeof PALETTES;
   const hit = cache.get(kind);
   if (hit) return hit;
   const p = PALETTES[kind];
