@@ -65,43 +65,71 @@ export class NoKeyError extends Error { constructor() { super('no-key'); } }
 export class GeminiError extends Error { constructor(public status: number, msg: string) { super(msg); } }
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
+const TIMEOUT_MS = 12000;
+const MAX_ATTEMPTS = 3;
 
 async function request(url: string, key: string, body?: unknown): Promise<{ status: number; data: unknown }> {
   const headers = { 'Content-Type': 'application/json', 'x-goog-api-key': key };
-  if (isNative) {
-    const r = body === undefined ? await CapacitorHttp.get({ url, headers }) : await CapacitorHttp.post({ url, headers, data: body });
-    return { status: r.status, data: r.data };
+  try {
+    if (isNative) {
+      const o = { url, headers, connectTimeout: TIMEOUT_MS, readTimeout: TIMEOUT_MS };
+      const r = body === undefined ? await CapacitorHttp.get(o) : await CapacitorHttp.post({ ...o, data: body });
+      return { status: r.status, data: r.data };
+    }
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+    try {
+      const r = await fetch(url, body === undefined ? { headers, signal: ctl.signal } : { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal });
+      return { status: r.status, data: await r.json().catch(() => null) };
+    } finally { clearTimeout(t); }
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e);
+    if ((e as Error)?.name === 'AbortError' || /timed? ?out|timeout/i.test(msg)) throw new GeminiError(0, 'timeout');
+    throw e;
   }
-  const r = await fetch(url, body === undefined ? { headers } : { method: 'POST', headers, body: JSON.stringify(body) });
-  return { status: r.status, data: await r.json().catch(() => null) };
 }
 
 const errorMessage = (data: unknown, status: number) => (data as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${status}`;
 
-/** The model was retired or never existed for this key; worth asking Google which ones are live. */
+/** The model was retired or never existed for this key. */
 const isGone = (e: GeminiError) => e.status === 404 || /no longer available|not found|not supported/i.test(e.message);
+/** Worth trying another model: retired, overloaded, rate limited or too slow. */
+const canSwitch = (e: GeminiError) => isGone(e) || e.status === 0 || e.status === 429 || e.status >= 500;
 
-/** Newest plain "flash" model this key can call, e.g. gemini-3.8-flash. */
-async function discoverModel(key: string): Promise<string | null> {
+/** Plain "flash" models this key can call, newest first (gemini-3.8-flash, gemini-3.7-flash, ...). */
+async function discoverModels(key: string): Promise<string[]> {
   const { status, data } = await request(`${API}/models?pageSize=200`, key);
-  if (status < 200 || status >= 300) return null;
+  if (status < 200 || status >= 300) return [];
   const list = (data as { models?: { name?: string; supportedGenerationMethods?: string[] }[] } | null)?.models ?? [];
   const ver = (id: string) => (id.match(/^gemini-(\d+(?:\.\d+)?)-flash$/)?.[1] ?? '');
-  const ids = list
+  return list
     .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
     .map((m) => (m.name ?? '').replace(/^models\//, ''))
-    .filter((id) => ver(id));
-  ids.sort((a, b) => parseFloat(ver(b)) - parseFloat(ver(a)));
-  return ids[0] ?? null;
+    .filter((id) => ver(id))
+    .sort((a, b) => parseFloat(ver(b)) - parseFloat(ver(a)));
 }
 
-async function generate(key: string, model: string, text: string): Promise<string> {
+/** A fallback that worked recently, so an overloaded favourite does not cost 12 s on every question. */
+const GOOD = 'aino.good';
+function recentGood(pref: string): string | null {
+  try {
+    const g = JSON.parse(localStorage.getItem(GOOD) ?? 'null') as { model: string; pref: string; at: number } | null;
+    return g && g.pref === pref && Date.now() - g.at < 30 * 60_000 ? g.model : null;
+  } catch { return null; }
+}
+const rememberGood = (model: string, pref: string) => { try { localStorage.setItem(GOOD, JSON.stringify({ model, pref, at: Date.now() })); } catch { /* ignore */ } };
+
+/** Thinking levels to try in order; some models (3.7, 3.8) refuse "minimal", and older ones take no setting at all. */
+const LEVELS: (string | null)[] = ['minimal', 'low', null];
+
+async function generate(key: string, model: string, text: string, level = 0): Promise<string> {
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt() }] },
     contents: [...history.slice(-8), { role: 'user', text }].map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
-    generationConfig: { temperature: 0.7, maxOutputTokens: 220 },
+    // Gemini 3 models spend the output budget on hidden thinking unless it is turned down; replies are two spoken sentences.
+    generationConfig: { temperature: 0.7, maxOutputTokens: 1024, ...(LEVELS[level] ? { thinkingConfig: { thinkingLevel: LEVELS[level] } } : {}) },
   };
   const { status, data } = await request(`${API}/models/${encodeURIComponent(model)}:generateContent`, key, body);
+  if (status === 400 && level < LEVELS.length - 1 && /thinking/i.test(errorMessage(data, status))) return generate(key, model, text, level + 1);
   if (status < 200 || status >= 300) throw new GeminiError(status, errorMessage(data, status));
   const out = (data as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim();
   if (!out) throw new GeminiError(200, 'Jawaban kosong');
@@ -111,17 +139,22 @@ async function generate(key: string, model: string, text: string): Promise<strin
 async function callGemini(text: string): Promise<string> {
   const key = await getGeminiKey();
   if (!key) throw new NoKeyError();
-  const { model } = loadPrefs();
-  try {
-    return await generate(key, model, text);
-  } catch (e) {
-    if (!(e instanceof GeminiError) || !isGone(e)) throw e;
-    const next = await discoverModel(key).catch(() => null);
-    if (!next || next === model) throw e;
-    const out = await generate(key, next, text);
-    savePrefs({ model: next });
-    return out;
+  const { model: pref } = loadPrefs();
+  const queue = [recentGood(pref) ?? pref]; const tried = new Set<string>();
+  let looked = false; let last: GeminiError | null = null;
+  while (queue.length && tried.size < MAX_ATTEMPTS) {
+    const model = queue.shift()!; if (tried.has(model)) continue; tried.add(model);
+    try {
+      const out = await generate(key, model, text);
+      if (model !== pref) { if (last && isGone(last)) savePrefs({ model }); else rememberGood(model, pref); }
+      return out;
+    } catch (e) {
+      if (!(e instanceof GeminiError) || !canSwitch(e)) throw e;
+      last = e;
+      if (!looked) { looked = true; queue.push(...(await discoverModels(key).catch(() => []))); }
+    }
   }
+  throw last ?? new GeminiError(0, 'timeout');
 }
 
 export async function ask(text: string): Promise<Reply> {
@@ -136,6 +169,7 @@ export async function ask(text: string): Promise<Reply> {
     if (e instanceof GeminiError) {
       if (e.status === 400 || e.status === 403) return { text: 'Kunci Gemini ditolak. Cek lagi kuncinya di Pengaturan.', offline: true };
       if (e.status === 429) return { text: 'Kuota Gemini habis sebentar. Coba lagi nanti.', offline: true };
+      if (e.status === 0 || e.status >= 500) return { text: 'Gemini sedang sibuk atau lambat. Coba lagi sebentar lagi.', offline: true };
       return { text: `Gemini bermasalah: ${e.message}`, offline: true };
     }
     return { text: 'Aku tidak bisa terhubung ke internet sekarang.', offline: true };

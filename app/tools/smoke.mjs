@@ -119,7 +119,37 @@ await page.fill('.chatin', 'ceritakan kisah lain'); await page.press('.chatin', 
 check('retired model falls back to the live flash model', (await page.locator('.msg.aino').last().textContent()) === 'Jawaban dari model baru.' && tried.join() === 'gemini-9.9-flash,gemini-3.8-flash', tried.join());
 check('discovered model is remembered', (await page.evaluate(() => JSON.parse(localStorage.getItem('aino.prefs')).model)) === 'gemini-3.8-flash');
 
-for (let i = errors.length - 1; i >= 0; i--) if (/status of 404/.test(errors[i])) errors.splice(i, 1); // the stubbed retired-model response
+// an overloaded favourite: 503 moves to the next flash model, thinking is kept minimal, and the working model sticks
+const seen2 = []; const bodies = [];
+await page.route('https://generativelanguage.googleapis.com/**', async (route) => {
+  const u = route.request().url();
+  if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+  if (u.includes('/models?')) return route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ models: ['3.8', '3.7', '3.5'].map((v) => ({ name: `models/gemini-${v}-flash`, supportedGenerationMethods: ['generateContent'] })) }) });
+  const m = u.match(/models\/([^:]+):generateContent/)[1]; seen2.push(m); bodies.push(route.request().postDataJSON());
+  if (m === 'gemini-3.8-flash') return route.fulfill({ status: 503, contentType: 'application/json', headers: cors, body: JSON.stringify({ error: { message: 'This model is currently experiencing high demand.' } }) });
+  return route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Jawaban dari cadangan.' }] } }] }) });
+});
+await page.fill('.chatin', 'pertanyaan saat sibuk'); await page.press('.chatin', 'Enter'); await sleep(1500);
+check('overloaded model falls back to the next one', (await page.locator('.msg.aino').last().textContent()) === 'Jawaban dari cadangan.' && seen2.join() === 'gemini-3.8-flash,gemini-3.7-flash', seen2.join());
+check('thinking kept minimal, room for the answer', bodies[0]?.generationConfig?.thinkingConfig?.thinkingLevel === 'minimal' && bodies[0]?.generationConfig?.maxOutputTokens >= 400);
+seen2.length = 0;
+await page.fill('.chatin', 'satu pertanyaan lagi'); await page.press('.chatin', 'Enter'); await sleep(1200);
+check('working fallback is reused, no second wait', seen2.join() === 'gemini-3.7-flash', seen2.join());
+check('user model choice untouched by an overload', (await page.evaluate(() => JSON.parse(localStorage.getItem('aino.prefs')).model)) === 'gemini-3.8-flash');
+
+// a model that refuses "minimal" thinking is retried with "low"
+const lv = [];
+await page.route('https://generativelanguage.googleapis.com/**', async (route) => {
+  if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+  const level = route.request().postDataJSON()?.generationConfig?.thinkingConfig?.thinkingLevel; lv.push(level);
+  if (level === 'minimal') return route.fulfill({ status: 400, contentType: 'application/json', headers: cors, body: JSON.stringify({ error: { message: 'Thinking level MINIMAL is not supported for this model.' } }) });
+  return route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Jawaban setelah turun level.' }] } }] }) });
+});
+await page.evaluate(() => localStorage.removeItem('aino.good'));
+await page.fill('.chatin', 'tes level berpikir'); await page.press('.chatin', 'Enter'); await sleep(1500);
+check('minimal thinking refused: retried with low', (await page.locator('.msg.aino').last().textContent()) === 'Jawaban setelah turun level.' && lv.join() === 'minimal,low', lv.join());
+
+for (let i = errors.length - 1; i >= 0; i--) if (/status of (400|404|503)/.test(errors[i])) errors.splice(i, 1); // the stubbed retired-model response
 check('no console or page errors', errors.length === 0, errors.join(' | '));
 await browser.close();
 console.log(failures ? `${failures} FAILED` : 'ALL PASSED');
