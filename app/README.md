@@ -9,6 +9,7 @@ npm install
 npm run dev                 # http://localhost:5173/?demo  (demo freezes the clock at 17.10, Sabtu 24 Oktober 2026)
 npm run build && npx vite preview --port 4173 &
 node tools/smoke.mjs        # headless UI smoke test (needs Playwright)
+node tools/smoke-live.mjs   # live weather path (GPS, geocoding, forecast all stubbed), run against a non-demo URL
 node tools/shots.mjs home work music clock calendar chat settings apps notifs rest coffee
 node tools/shots.mjs seq-music-open seq-music-close seq-headline   # paused-animation frame sequences
 python3 -I tools/compare.py REF.png SHOT.png OUT.png               # side-by-side with the reference frame

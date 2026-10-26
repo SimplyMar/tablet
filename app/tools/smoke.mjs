@@ -46,6 +46,20 @@ for (const [aria, key] of [['Mode kerja', 'work'], ['Santai', 'rest'], ['Istirah
   check(`mode ${key}`, (await page.locator('.grid').getAttribute('data-mode')) === key);
 }
 
+// regression: screens must keep their contents after switching away and back
+await page.click('button[aria-label="Mode kerja"]'); await sleep(1300);
+await page.click('button[aria-label="Ringkasan"]'); await sleep(1500);
+const vis = await page.evaluate(() => [...document.querySelectorAll('.grid > .card')].map((c) => [getComputedStyle(c).opacity, getComputedStyle(c.firstElementChild).opacity]).flat());
+check('cards fully visible after returning to a mode', vis.length === 12 && vis.every((v) => v === '1'), vis.join(','));
+await page.click('.nowpill'); await sleep(900); await page.click('.panel.music button[aria-label="Tutup"]'); await sleep(1300);
+check('home fully visible after closing an overlay', (await page.evaluate(() => getComputedStyle(document.querySelector('.home')).opacity)) === '1');
+
+// keep-awake toggle
+check('keep awake defaults on', (await page.getAttribute('.topbar .keep', 'aria-pressed')) === 'true');
+await page.click('.topbar .keep'); await sleep(300);
+check('keep awake can be switched off and is remembered', (await page.getAttribute('.topbar .keep', 'aria-pressed')) === 'false' && JSON.parse(await page.evaluate(() => localStorage.getItem('aino.prefs'))).awake === false);
+await page.click('.topbar .keep'); await sleep(300);
+
 // sheets
 for (const [aria, cls] of [['Semua aplikasi', '.panel.apps'], ['Notifikasi', '.panel.notifs'], ['Pengaturan', '.panel.settings'], ['Obrolan dengan Aino', '.panel.chat']]) {
   await page.click(`button[aria-label="${aria}"]`); await sleep(900);
@@ -64,7 +78,7 @@ check('voice command switches mode', (await page.locator('.grid').getAttribute('
 
 // key is stored and never rendered back
 await page.click('button[aria-label="Pengaturan"]'); await sleep(900);
-await page.fill('.settings input[type="password"]', 'TEST-KEY-123'); await page.click('.settings .pill-dark'); await sleep(500);
+await page.fill('.settings input[type="password"]', 'TEST-KEY-123'); await page.click('.settings button:has-text("Simpan")'); await sleep(500);
 check('key saved', (await page.evaluate(() => localStorage.getItem('aino.gemini_key'))) === 'TEST-KEY-123');
 check('key field cleared after save', (await page.inputValue('.settings input[type="password"]')) === '');
 

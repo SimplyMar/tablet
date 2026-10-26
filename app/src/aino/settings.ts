@@ -1,7 +1,7 @@
 import { getSecret, setSecret, removeSecret } from '../native/bridge';
 
-export type Prefs = { name: string; model: string; speak: boolean };
-const DEFAULTS: Prefs = { name: 'isni', model: 'gemini-2.5-flash', speak: true };
+export type Prefs = { name: string; model: string; speak: boolean; awake: boolean };
+const DEFAULTS: Prefs = { name: 'isni', model: 'gemini-2.5-flash', speak: true, awake: true };
 
 export function loadPrefs(): Prefs {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('aino.prefs') ?? '{}') }; } catch { return { ...DEFAULTS }; }

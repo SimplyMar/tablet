@@ -3,8 +3,10 @@ import { icon, filled } from '../lib/icons';
 import { artUrl } from './art';
 import { player, playerActions, fmt } from '../lib/player';
 import { breakTimer, timerActions, mmss, BREAK_SECONDS } from '../lib/timer';
-import { CITIES, WEATHER } from '../data/mock';
-import { dayName, hm, monthName, now, WIB, zoned } from '../lib/time';
+import { CITIES } from '../data/mock';
+import { weather, kindIcon } from '../lib/weather';
+import { deltaLabel } from '../lib/time';
+import { dayName, hm, monthName, now, homeOffset, zoned } from '../lib/time';
 import type { Card } from './cards';
 
 function card(name: string, cls: string, ...kids: (Node | null)[]) {
@@ -16,12 +18,15 @@ export function restCards(): Card[] {
   const t = h('div', { class: 't' }); const d = h('div', { class: 'd' }); const z = h('div', { class: 'z' });
   const big = card('bigclock', 'bigclock', t, d, z);
   const update = () => {
-    const n = now(); const j = zoned(n, WIB);
+    const n = now(); const j = zoned(n, homeOffset());
     t.textContent = hm(j); d.textContent = `${dayName(j.dow)}, ${j.day} ${monthName(j.m)} ${j.y}`;
     z.replaceChildren(...CITIES.slice(1).map((c) => h('span', {}, c.name, h('b', {}, hm(zoned(n, c.offset))))));
   };
   update();
-  const wx = card('wx', 'wxcard', h('div', { class: 't' }, `${WEATHER.temp}°`), h('div', { class: 'c' }, WEATHER.text), h('div', { class: 'w' }, `${WEATHER.city} · terasa ${WEATHER.feels}° · ${WEATHER.hi}° / ${WEATHER.lo}°`), icon('drizzle', 44, 1.5));
+  const wt = h('div', { class: 't' }); const wc = h('div', { class: 'c' }); const ww = h('div', { class: 'w' }); const wi = h('div', { class: 'wi' });
+  const wx = card('wx', 'wxcard', wt, wc, ww, wi);
+  const upw = () => { const w = weather.get(); wt.textContent = `${w.temp}°`; wc.textContent = w.text; ww.textContent = `${w.city} · terasa ${w.feels}° · ${w.hi}° / ${w.lo}°`; wi.replaceChildren(icon(kindIcon(w.kind), 44, 1.5)); };
+  upw(); weather.on(upw);
   const cv = h('div', { class: 'cv' }); const tt = h('b'); const aa = h('span'); const fill = h('div', { class: 'fill' }); const cur = h('small'); const len = h('small');
   const play = h('button', { class: 'play', 'aria-label': 'Putar atau jeda', onClick: () => playerActions.toggle() });
   const mk = (n: 'prev' | 'next', fn: () => void) => h('button', { class: 'sk', 'aria-label': n === 'prev' ? 'Sebelumnya' : 'Berikutnya', onClick: fn }, filled(n, 18));

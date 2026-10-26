@@ -4,7 +4,7 @@ import {
   Lock, MessageSquare, Mic, MicOff, Monitor, Moon, Pause, Play, Camera, Repeat, Shuffle, SkipBack,
   SkipForward, SlidersHorizontal, Sun, Timer, Volume, Volume1, Volume2, VolumeX, X, Plus,
   MoreHorizontal, MessagesSquare, Link2, Maximize2, Send, Settings, Wifi, Battery, Bluetooth, Moon as MoonIcon,
-  Sparkles, Check, Trash2, Clock, Newspaper, Navigation, MapPin, Eye, EyeOff, KeyRound, Globe,
+  Sparkles, Check, CloudSun, CloudFog, CloudSnow, CloudLightning, Lightbulb, LightbulbOff, LocateFixed, Search, Trash2, Clock, Newspaper, Navigation, MapPin, Eye, EyeOff, KeyRound, Globe,
 } from 'lucide';
 
 const map = {
@@ -18,6 +18,7 @@ const map = {
   settings: Settings, wifi: Wifi, battery: Battery, bluetooth: Bluetooth, sparkles: Sparkles, check: Check,
   trash: Trash2, clock: Clock, news: Newspaper, nav: Navigation, pin: MapPin, eye: Eye, eyeOff: EyeOff,
   key: KeyRound, globe: Globe, moonAlt: MoonIcon,
+  cloudSun: CloudSun, fog: CloudFog, snow: CloudSnow, storm: CloudLightning, bulb: Lightbulb, bulbOff: LightbulbOff, locate: LocateFixed, search: Search,
 } as const;
 
 export type IconName = keyof typeof map | 'dots';

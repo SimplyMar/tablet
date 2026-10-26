@@ -3,7 +3,8 @@ import { icon, type IconName } from '../lib/icons';
 import { EASE_OUT, EASE_IN } from '../lib/motion';
 import { loadPrefs, savePrefs, getGeminiKey, setGeminiKey, clearGeminiKey } from '../aino/settings';
 import { ask, resetHistory, type Reply } from '../aino/brain';
-import { canListen, hasNotificationAccess, isNative, listen, openApp, openNotificationAccessSettings, speak, stopSpeaking } from '../native/bridge';
+import { canListen, isNative, listen, nowPlaying, notificationStatus, openApp, openAppSettings, openNotificationAccessSettings, speak, stopSpeaking } from '../native/bridge';
+import { weather, refreshWeather, savePlace, searchPlaces } from '../lib/weather';
 import type { Panel } from './panels';
 
 const closeBtn = (onClose: () => void) => h('button', { class: 'cbtn', 'aria-label': 'Tutup', onClick: onClose }, icon('close', 22, 1.8));
@@ -58,41 +59,80 @@ export function settingsPanel(onClose: () => void): Panel {
   const name = h('input', { class: 'field', type: 'text', value: prefs.name, maxlength: '24' }) as HTMLInputElement;
   const voice = h('button', { class: 'switch', role: 'switch', 'aria-checked': String(prefs.speak), onClick: () => { const v = voice.getAttribute('aria-checked') !== 'true'; voice.setAttribute('aria-checked', String(v)); savePrefs({ speak: v }); } }, h('i'));
   const access = h('div', { class: 'status' });
+  const probe = h('div', { class: 'status mono' });
+  const where = h('div', { class: 'status' });
+  const hits = h('div', { class: 'hits' });
+  const place = h('input', { class: 'field', type: 'text', placeholder: 'Cari kota, mis. Bandung', autocomplete: 'off' }) as HTMLInputElement;
 
   const refreshKey = async () => {
     const has = !!(await getGeminiKey());
     status.textContent = has ? 'Kunci tersimpan di perangkat ini.' : 'Belum ada kunci. Aino hanya memahami perintah dasar.';
     status.dataset.ok = String(has);
   };
+
   const refreshAccess = async () => {
-    if (!isNative) { access.textContent = 'Hanya tersedia di aplikasi Android.'; return; }
-    const ok = await hasNotificationAccess();
-    access.textContent = ok ? 'Akses aktif. Musik dari YouTube Music tampil di sini.' : 'Belum diizinkan. Beri akses notifikasi agar kartu musik membaca lagu yang sedang diputar.';
-    access.dataset.ok = String(ok);
+    if (!isNative) { access.textContent = 'Hanya tersedia di aplikasi Android.'; access.dataset.ok = 'false'; return; }
+    const s = await notificationStatus();
+    access.dataset.ok = String(s.connected);
+    access.textContent = s.connected ? 'Aktif. Kartu musik membaca pemutar yang sedang berjalan.'
+      : s.granted ? 'Izin sudah diberikan, sedang menyambung. Jika tidak berubah dalam beberapa detik, tutup aplikasi dari daftar terbaru lalu buka lagi.'
+      : 'Belum diizinkan. Tekan "Beri akses", nyalakan Aino Dash di daftar, lalu kembali ke sini.';
   };
+  const refreshWhere = () => {
+    const w = weather.get();
+    where.dataset.ok = String(w.status === 'live');
+    where.textContent = w.status === 'live' ? `${w.city} · ${w.note}${w.updated ? ` · diperbarui ${new Date(w.updated).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}` : ''}`
+      : w.status === 'locating' ? 'Mencari lokasi…' : w.status === 'denied' ? 'Izin lokasi ditolak. Izinkan di pengaturan Android, atau cari kota di bawah.' : w.status === 'error' ? 'Cuaca gagal dimuat. Cek koneksi internet.' : 'Memakai data contoh.';
+  };
+  const offW = weather.on(refreshWhere);
+  const timer = window.setInterval(() => { void refreshAccess(); }, 2000);
+  const onVis = () => { if (!document.hidden) void refreshAccess(); };
+  document.addEventListener('visibilitychange', onVis);
+
   const save = h('button', { class: 'pill-dark', onClick: async () => {
     if (key.value.trim()) { await setGeminiKey(key.value); key.value = ''; }
     savePrefs({ model: model.value.trim() || 'gemini-2.5-flash', name: name.value.trim() || 'isni' });
     await refreshKey(); save.textContent = 'Tersimpan'; setTimeout(() => (save.textContent = 'Simpan'), 1400);
   } }, 'Simpan');
   const clear = h('button', { class: 'pill-ghost', onClick: async () => { await clearGeminiKey(); await refreshKey(); } }, 'Hapus kunci');
-  const grant = h('button', { class: 'pill-ghost', onClick: () => { void openNotificationAccessSettings(); } }, 'Buka pengaturan akses');
+  const grant = h('button', { class: 'pill-dark', onClick: () => { void openNotificationAccessSettings(); } }, 'Beri akses');
+  const appInfo = h('button', { class: 'pill-ghost', onClick: () => { void openAppSettings(); } }, 'Info aplikasi');
+  const test = h('button', { class: 'pill-ghost', onClick: async () => {
+    probe.textContent = 'Memeriksa…';
+    try { const n = await nowPlaying(); probe.textContent = n ? (n.active ? `Terbaca: ${n.title} · ${n.artist} (${n.app}, ${n.playing ? 'diputar' : 'jeda'})` : `Belum ada lagu. ${n.debug ?? ''}`) : 'Bukan aplikasi Android.'; }
+    catch (e) { probe.textContent = `Gagal: ${e instanceof Error ? e.message : String(e)}`; }
+  } }, 'Uji sekarang');
+
+  const gps = h('button', { class: 'pill-dark', onClick: () => { place.value = ''; hits.replaceChildren(); savePlace(null); void refreshWeather({ forceGps: true }); } }, icon('locate', 18, 2), 'Pakai GPS');
+  const find = async () => {
+    const q = place.value.trim(); if (q.length < 2) return;
+    hits.replaceChildren(h('span', { class: 'status' }, 'Mencari…'));
+    try {
+      const r = await searchPlaces(q);
+      hits.replaceChildren(...(r.length ? r.map((x) => h('button', { class: 'hit', onClick: () => { savePlace({ city: x.name, lat: x.lat, lon: x.lon, manual: true }); hits.replaceChildren(); place.value = ''; void refreshWeather(); } }, h('b', {}, x.name), h('span', {}, x.admin))) : [h('span', { class: 'status' }, 'Kota tidak ditemukan.')]));
+    } catch { hits.replaceChildren(h('span', { class: 'status' }, 'Pencarian gagal. Cek koneksi internet.')); }
+  };
+  place.addEventListener('keydown', (e) => { if (e.key === 'Enter') void find(); });
 
   const row = (label: string, hint: string, ctl: Node) => h('div', { class: 'srow' }, h('div', {}, h('b', {}, label), h('span', {}, hint)), ctl);
   const el = h('section', { class: 'panel settings', 'aria-label': 'Pengaturan' },
     h('div', { class: 'bar' }, h('h2', {}, 'Pengaturan'), h('i', { class: 'grow' }), closeBtn(onClose)),
     h('div', { class: 'scroll' },
+      h('div', { class: 'scard' }, h('h3', {}, 'Lokasi dan cuaca'),
+        h('div', { class: 'srow col' }, h('div', {}, h('b', {}, 'Lokasi saat ini'), h('span', {}, 'Cuaca, jam, dan zona waktu mengikuti lokasi ini. Lokasi dipakai kasar saja dan hanya dikirim ke layanan cuaca.')), where,
+          h('div', { class: 'keyline' }, place, h('button', { class: 'pill-ghost', onClick: () => void find() }, icon('search', 18, 2), 'Cari'), gps), hits)),
+      h('div', { class: 'scard' }, h('h3', {}, 'Musik'),
+        h('div', { class: 'srow col' }, h('div', {}, h('b', {}, 'Akses notifikasi'), h('span', {}, 'Dibutuhkan agar kartu musik membaca dan mengendalikan lagu dari YouTube Music. Android 13 ke atas memblokir tombolnya untuk aplikasi yang dipasang manual: buka Info aplikasi, tekan titik tiga di kanan atas, pilih "Izinkan setelan terbatas", lalu ulangi.')), access,
+          h('div', { class: 'actions left' }, grant, appInfo, test), probe)),
       h('div', { class: 'scard' }, h('h3', {}, 'Aino'),
         row('Nama panggilan', 'Dipakai Aino untuk menyapamu.', name),
         h('div', { class: 'srow col' }, h('div', {}, h('b', {}, 'Kunci Gemini'), h('span', {}, 'Dari aistudio.google.com/apikey. Disimpan terenkripsi di tablet ini, tidak pernah masuk ke git.')), h('div', { class: 'keyline' }, key, show), status),
         row('Model', 'Nama model Gemini yang dipakai untuk menjawab.', model),
         row('Suara Aino', 'Bacakan jawaban dengan suara.', voice),
         h('div', { class: 'actions' }, clear, save)),
-      h('div', { class: 'scard' }, h('h3', {}, 'Musik'),
-        h('div', { class: 'srow col' }, h('div', {}, h('b', {}, 'Akses notifikasi'), h('span', {}, 'Dibutuhkan untuk membaca dan mengendalikan musik yang sedang diputar.')), access, h('div', { class: 'actions left' }, grant))),
-      h('div', { class: 'scard' }, h('h3', {}, 'Tentang'), h('div', { class: 'srow' }, h('div', {}, h('b', {}, 'Aino Dash'), h('span', {}, 'Versi 0.1 · dasbor tablet landscape')), h('span', { class: 'ver' }, 'id.simplymar.tablet')))));
-  void refreshKey(); void refreshAccess();
-  return { el, mini: h('div') };
+      h('div', { class: 'scard' }, h('h3', {}, 'Tentang'), h('div', { class: 'srow' }, h('div', {}, h('b', {}, 'Aino Dash'), h('span', {}, 'Versi 0.2 · dasbor tablet landscape')), h('span', { class: 'ver' }, 'id.simplymar.tablet')))));
+  void refreshKey(); void refreshAccess(); refreshWhere();
+  return { el, mini: h('div'), destroy: () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVis); offW(); } };
 }
 
 /* ------------------------------------------------------------------- apps */

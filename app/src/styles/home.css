@@ -1,6 +1,12 @@
 /* ---------- top bar ---------- */
 .topbar { position: absolute; left: 16px; right: 16px; top: 16px; height: 48px; display: flex; align-items: center; }
 .topbar .date { font-size: 17px; font-weight: 500; color: var(--ink-3); letter-spacing: -0.005em; flex: 1; }
+.topbar .keep { height: 40px; padding: 0 14px 0 12px; border-radius: 20px; display: flex; align-items: center; gap: 8px; margin-right: 8px; color: var(--ink-2); background: rgba(255, 255, 255, 0.55); font-size: 14px; font-weight: 500;
+  transition: background 220ms var(--ease-out), color 220ms, transform 160ms var(--ease-out); }
+.topbar .keep::after { content: 'Layar menyala'; }
+.topbar .keep[aria-pressed='false']::after { content: 'Boleh redup'; }
+.topbar .keep[aria-pressed='true'] { background: var(--dark); color: #fff; }
+.topbar .keep:active { transform: scale(0.94); }
 .topbar .vol { width: 40px; height: 40px; display: grid; place-items: center; color: var(--ink-2); margin-right: 8px; }
 .seg { position: relative; display: flex; align-items: center; height: 48px; padding: 0 1px; border-radius: 24px;
   background: rgba(255, 255, 255, 0.7); box-shadow: var(--shadow-card); }
@@ -103,6 +109,7 @@
 .clock .zones { position: absolute; left: 20px; right: 20px; bottom: 19px; display: flex; gap: 8px; }
 .zone { flex: 1; height: 51px; border-radius: var(--r-inner); background: var(--inner); position: relative; padding: 9px 0 0 33px; }
 .zone .ic { position: absolute; left: 16px; top: 15px; color: #6c5fc0; }
+.zone.day .ic { color: #d79b2b; }
 .zone small { display: block; font-size: 13px; color: var(--ink-2); line-height: 14px; }
 .zone b { display: block; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; margin-top: 1px; }
 

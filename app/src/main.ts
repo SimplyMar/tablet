@@ -6,6 +6,8 @@ import './styles/work.css';
 import './styles/sheets.css';
 import { createDashboard } from './ui/dashboard';
 import { startNowPlaying } from './native/nowplaying';
+import { startWeather } from './lib/weather';
+import { startAwake } from './native/awake';
 
 const stage = document.getElementById('stage')!;
 const viewport = document.getElementById('viewport')!;
@@ -22,4 +24,6 @@ const dash = createDashboard(stage);
 // handle for screenshots and manual poking: window.__dash.openPanel('music')
 (window as unknown as { __dash: typeof dash }).__dash = dash;
 void startNowPlaying();
+startWeather();
+startAwake();
 viewport.dataset.ready = '1';

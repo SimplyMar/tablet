@@ -82,7 +82,7 @@
 .bigclock .d { position: absolute; left: 50px; top: 306px; font-size: 26px; color: var(--ink-2); }
 .bigclock .z { position: absolute; left: 50px; bottom: 36px; display: flex; gap: 28px; font-size: 20px; color: var(--ink-2); } .bigclock .z b { color: var(--ink); font-weight: 650; margin-left: 8px; }
 .wxcard .t { position: absolute; left: 24px; top: 28px; font-size: 64px; font-weight: 600; letter-spacing: -0.03em; } .wxcard .c { position: absolute; left: 26px; top: 108px; font-size: 20px; font-weight: 600; } .wxcard .w { position: absolute; left: 26px; top: 138px; font-size: 16px; color: var(--ink-2); }
-.wxcard .ic { position: absolute; right: 26px; top: 30px; color: var(--ink-2); }
+.wxcard .wi { position: absolute; right: 26px; top: 30px; color: var(--ink-2); }
 .ringcard .rwrap { position: absolute; left: 50%; top: 42%; width: 310px; height: 310px; margin: -155px 0 0 -155px; }
 .ringcard svg { position: absolute; inset: 0; transform: rotate(-90deg); } .ringcard .time { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; }
 .ringcard .time b { font-size: 84px; line-height: 88px; font-weight: 600; letter-spacing: -0.045em; } .ringcard .time span { font-size: 18px; color: var(--ink-2); }
@@ -91,3 +91,12 @@
 .tipscard ul { position: absolute; left: 30px; right: 30px; top: 86px; display: grid; gap: 14px; list-style: none; }
 .tipscard li { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 22px; background: var(--inner); font-size: 19px; } .tipscard li .ic { color: var(--green); }
 .tipscard .foot { position: absolute; left: 30px; right: 30px; bottom: 28px; font-size: 16px; color: var(--ink-2); }
+
+/* ---------- settings: location + diagnostics ---------- */
+.status.mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; word-break: break-word; user-select: text; -webkit-user-select: text; }
+.keyline .pill-dark, .keyline .pill-ghost { flex: none; }
+.hits { display: grid; gap: 8px; }
+.hit { display: flex; justify-content: space-between; align-items: center; height: 52px; padding: 0 20px; border-radius: 26px; background: rgba(255, 255, 255, 0.85); text-align: left; transition: transform 160ms var(--ease-out); }
+.hit:active { transform: scale(0.98); } .hit b { font-size: 17px; font-weight: 600; } .hit span { font-size: 14px; color: var(--ink-2); }
+.settings .actions.left .pill-dark, .settings .actions.left .pill-ghost { display: flex; align-items: center; gap: 8px; }
+.keyline .pill-ghost { display: flex; align-items: center; gap: 8px; } .keyline .pill-dark { display: flex; align-items: center; gap: 8px; }

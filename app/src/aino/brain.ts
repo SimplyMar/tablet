@@ -2,8 +2,9 @@ import { CapacitorHttp } from '@capacitor/core';
 import { isNative } from '../native/bridge';
 import { getGeminiKey, loadPrefs } from './settings';
 import { player } from '../lib/player';
-import { CITIES, EVENTS, WEATHER } from '../data/mock';
-import { dayName, hm, monthName, now, WIB, zoned } from '../lib/time';
+import { CITIES, EVENTS } from '../data/mock';
+import { weather } from '../lib/weather';
+import { dayName, hm, monthName, now, homeOffset, zoned, zoneLabel } from '../lib/time';
 
 export type Turn = { role: 'user' | 'model'; text: string };
 export type Intent =
@@ -29,28 +30,28 @@ export function localIntent(raw: string): Reply | null {
   if (has(t, /mode kerja|fokus kerja/)) return { text: 'Mode kerja aktif. Kabar yang tidak penting aku tahan dulu.', intent: { kind: 'mode', mode: 'work' } };
   if (has(t, /beranda|ringkasan|halaman utama/)) return { text: `Kembali ke beranda, ${name}.`, intent: { kind: 'mode', mode: 'home' } };
   if (has(t, /kalender|jadwal|agenda|acara/)) return { text: describeAgenda(), intent: { kind: 'open', panel: 'calendar' } };
-  if (has(t, /jam dunia|sydney|colfax|zona waktu/)) return { text: 'Sydney empat jam lebih cepat. Jam kerja kalian bertemu pukul sembilan sampai satu siang WIB.', intent: { kind: 'open', panel: 'clock' } };
+  if (has(t, /jam dunia|sydney|colfax|zona waktu/)) return { text: 'Kubuka jam dunia. Di situ terlihat kapan jam kerja kalian bertemu.', intent: { kind: 'open', panel: 'clock' } };
   if (has(t, /buka musik|tampilkan musik|lagu apa/)) { const s = player.get(); return { text: `Sedang diputar ${s.track.title} dari ${s.track.artist}.`, intent: { kind: 'open', panel: 'music' } }; }
-  if (has(t, /jam berapa|pukul berapa|waktu sekarang/)) { const j = zoned(now(), WIB); return { text: `Sekarang pukul ${hm(j).replace('.', ' lewat ')}.` }; }
-  if (has(t, /hari apa|tanggal berapa|tanggal hari ini/)) { const j = zoned(now(), WIB); return { text: `Hari ini ${dayName(j.dow)}, ${j.day} ${monthName(j.m)} ${j.y}.` }; }
-  if (has(t, /cuaca|hujan|gerimis|suhu/)) return { text: `Di ${WEATHER.city} sekarang ${WEATHER.text.toLowerCase()}, suhu ${WEATHER.temp} derajat, terasa ${WEATHER.feels} derajat.` };
+  if (has(t, /jam berapa|pukul berapa|waktu sekarang/)) { const j = zoned(now(), homeOffset()); return { text: `Sekarang pukul ${hm(j).replace('.', ' lewat ')}.` }; }
+  if (has(t, /hari apa|tanggal berapa|tanggal hari ini/)) { const j = zoned(now(), homeOffset()); return { text: `Hari ini ${dayName(j.dow)}, ${j.day} ${monthName(j.m)} ${j.y}.` }; }
+  if (has(t, /cuaca|hujan|gerimis|suhu/)) { const w = weather.get(); return { text: `Di ${w.city} sekarang ${w.text.toLowerCase()}, suhu ${w.temp} derajat, terasa ${w.feels} derajat. ${w.at.charAt(0).toUpperCase() + w.at.slice(1)}.` }; }
   return null;
 }
 
 function describeAgenda(): string {
-  const today = zoned(now(), WIB).day;
+  const today = zoned(now(), homeOffset()).day;
   const next = EVENTS.filter((e) => e.day >= today).sort((a, b) => a.day - b.day)[0];
   if (!next) return 'Tidak ada acara dalam waktu dekat. Hari yang lowong.';
   return next.day === today ? `Hari ini ada ${next.title} pukul ${next.time}.` : `Hari ini tidak ada acara. Berikutnya tanggal ${next.day}: ${next.title}.`;
 }
 
 function systemPrompt(): string {
-  const d = now(); const j = zoned(d, WIB); const s = player.get(); const p = loadPrefs();
+  const d = now(); const j = zoned(d, homeOffset()); const s = player.get(); const p = loadPrefs();
   return [
     `Kamu adalah Aino, asisten suara di dasbor tablet milik ${p.name}. Jawab dalam bahasa Indonesia yang santai, hangat, dan singkat (maksimal dua kalimat) karena jawabanmu dibacakan keras.`,
     'Jangan memakai markdown, daftar, atau emoji. Jika tidak yakin, katakan terus terang.',
-    `Konteks saat ini: ${dayName(j.dow)}, ${j.day} ${monthName(j.m)} ${j.y}, pukul ${hm(j)} WIB.`,
-    `Cuaca ${WEATHER.city}: ${WEATHER.text}, ${WEATHER.temp}°C (terasa ${WEATHER.feels}°C).`,
+    `Konteks saat ini: ${dayName(j.dow)}, ${j.day} ${monthName(j.m)} ${j.y}, pukul ${hm(j)} ${zoneLabel()} di ${weather.get().city}.`,
+    `Cuaca ${weather.get().city}: ${weather.get().text}, ${weather.get().temp}°C (terasa ${weather.get().feels}°C), hari ini ${weather.get().lo}–${weather.get().hi}°C.`,
     `Zona waktu lain: ${CITIES.slice(1).map((c) => `${c.name} ${hm(zoned(d, c.offset))}`).join(', ')}.`,
     `Acara bulan ini: ${EVENTS.map((e) => `tgl ${e.day} ${e.time} ${e.title}`).join('; ')}.`,
     `Musik: ${s.playing ? 'memutar' : 'jeda'} "${s.track.title}" oleh ${s.track.artist}.`,

@@ -3,8 +3,10 @@ import { icon, filled, type IconName } from '../lib/icons';
 import { artUrl } from './art';
 import { player, playerActions } from '../lib/player';
 import { CITIES, DECK, EVENTS, TUMRA } from '../data/mock';
+import { weather, kindIcon } from '../lib/weather';
+import { deltaLabel } from '../lib/time';
 import { breakTimer, mmss, BREAK_SECONDS } from '../lib/timer';
-import { dayShort, hm, monthName, now, pad, WIB, zoned, dayName, monthShort } from '../lib/time';
+import { dayShort, hm, monthName, now, pad, homeOffset, zoned, dayName, monthShort } from '../lib/time';
 
 export type Card = { el: HTMLElement; update?: () => void };
 
@@ -19,21 +21,24 @@ export function clockCard(opts: { onOpen: () => void }): Card {
   const big = h('div', { class: 'big' });
   const sub = h('div', { class: 'sub' });
   const zones = h('div', { class: 'zones' });
-  const el = card('clock', 'clock tappable',
-    h('div', { class: 'city' }, 'Jakarta'), big, sub,
-    h('div', { class: 'wx' }, icon('drizzle', 28, 1.7), h('b', {}, '29°'), h('span', {}, '34° / 25°')), zones);
+  const city = h('div', { class: 'city' }); const wxIcon = h('div', { class: 'wxi' }); const temp = h('b'); const range = h('span');
+  const el = card('clock', 'clock tappable', city, big, sub, h('div', { class: 'wx' }, wxIcon, temp, range), zones);
   el.addEventListener('click', opts.onOpen);
   const update = () => {
     const d = now();
-    const j = zoned(d, WIB);
+    const j = zoned(d, homeOffset());
     big.textContent = hm(j);
     sub.textContent = `${dayShort(j.dow)}, ${j.day} ${monthShort(j.m)}`;
     zones.replaceChildren(...CITIES.slice(1).map((c) => {
       const z = zoned(d, c.offset);
-      return h('div', { class: 'zone' }, icon('moon', 15, 2), h('small', {}, `${c.name} · ${c.delta.replace(' jam', ' j').replace('-', '−')}`), h('b', {}, hm(z)));
+      const night = z.hh < 6 || z.hh >= 18;
+      return h('div', { class: `zone${night ? '' : ' day'}` }, icon(night ? 'moon' : 'sun', 15, 2), h('small', {}, `${c.name} · ${deltaLabel(c.offset, 'j')}`), h('b', {}, hm(z)));
     }));
+    const w = weather.get();
+    city.textContent = w.city; temp.textContent = `${w.temp}°`; range.textContent = `${w.hi}° / ${w.lo}°`;
+    wxIcon.replaceChildren(icon(kindIcon(w.kind), 28, 1.7));
   };
-  update();
+  update(); weather.on(update);
   return { el, update };
 }
 
@@ -83,7 +88,7 @@ export function calendarCard(opts: { onOpen: () => void }): Card {
   const el = card('cal', 'calw tappable', title, month, wk, days, agenda);
   el.addEventListener('click', opts.onOpen);
   const update = () => {
-    const t = zoned(now(), WIB);
+    const t = zoned(now(), homeOffset());
     month.textContent = `${monthName(t.m)} ${t.y}`;
     const first = new Date(Date.UTC(t.y, t.m, 1)).getUTCDay();
     const lead = (first + 6) % 7;

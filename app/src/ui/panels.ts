@@ -3,7 +3,8 @@ import { icon, filled } from '../lib/icons';
 import { artUrl } from './art';
 import { player, playerActions, fmt, type LightMode } from '../lib/player';
 import { CITIES, EVENTS, QUEUE } from '../data/mock';
-import { dayName, dayShort, hm, monthName, now, WIB, zoned } from '../lib/time';
+import { dayName, hm, monthName, now, homeOffset, zoned, zoneLabel, deltaLabel, DEMO } from '../lib/time';
+import { weather, fetchForecast, kindIcon, type Hour, type Kind } from '../lib/weather';
 import { EASE_OUT, EASE_IN, EASE_IO } from '../lib/motion';
 
 export type PanelName = 'music' | 'clock' | 'calendar';
@@ -85,76 +86,107 @@ export function musicPanel(onClose: () => void): Panel {
 }
 
 /* ------------------------------------------------------------ world clock */
-const hourly = (items: { h: string; t: number; k?: string }[], night: boolean) =>
-  h('div', { class: 'hours' }, ...items.map((i) => h('div', {}, h('span', {}, i.h), night ? h('i', { class: 'moon' }, icon('moon', 16, 1.8)) : icon(i.k === 'cloud' ? 'cloud' : 'drizzle', 16, 1.8), h('b', {}, `${i.t}°`))));
+type Fc = Awaited<ReturnType<typeof fetchForecast>>;
+const COORDS: Record<string, [number, number]> = { syd: [-33.8688, 151.2093] };
+const remote = new Map<string, { at: number; fc: Fc }>();
+
+const daypart = (hh: number) => (hh < 4 ? 'Malam' : hh < 11 ? 'Pagi' : hh < 15 ? 'Siang' : hh < 18 ? 'Sore' : 'Malam');
+const nightAt = (hh: number) => hh < 6 || hh >= 18;
+
+const hourly = (items: Hour[]) =>
+  h('div', { class: 'hours' }, ...items.map((i) => h('div', {}, h('span', {}, i.h), h('i', { class: i.kind === 'moon' || i.kind === 'partlyNight' ? 'moon' : '' }, icon(kindIcon(i.kind), 16, 1.8)), h('b', {}, `${i.t}°`))));
 
 export function clockPanel(onClose: () => void): Panel {
-  const d = now(); const j = CITIES[0];
-  const other = (id: string) => CITIES.find((c) => c.id === id)!;
+  const d = now();
   let active = 'syd';
+  const left = h('div', { class: 'ccard' });
   const right = h('div', { class: 'ccard' });
   const overlapCard = h('div', { class: 'overlap' });
+  let cardMessage = '';
 
-  const hoursOf = (offset: number) => zoned(d, offset);
-  const build = () => {
-    const c = other(active); const z = hoursOf(c.offset); const jk = hoursOf(WIB);
-    const sparse = c.hourly.map((hr) => ({ h: hr.h, t: hr.t, k: 'cloud' }));
-    right.replaceChildren(
-      h('div', { class: 'top' }, c.name, h('span', { class: 'chip blue' }, c.delta)),
-      h('div', { class: 'daypart' }, icon(c.night ? 'moon' : 'sun', 17, 1.8), c.night ? 'Malam' : 'Siang'),
-      h('div', { class: 'big' }, hm(z)),
-      h('div', { class: 'date' }, `${dayName(z.dow)}, ${z.day} ${monthName(z.m)}`),
-      h('div', { class: 'wx' }, c.night ? h('i', { class: 'moon' }, icon('moon', 38, 1.6)) : icon('cloud', 38, 1.6), `${c.temp}°`),
-      h('div', { class: 'wxs' }, `${c.text} · ${c.hi}° / ${c.lo}°`), h('hr'), hourly(sparse, c.night));
-    overlapCard.replaceChildren(timeline(c.name, c.offset, jk));
+  const cityData = (id: string) => {
+    const c = CITIES.find((x) => x.id === id)!;
+    const live = remote.get(id)?.fc;
+    const offset = live ? live.offset : c.offset;
+    const hours: Hour[] = live ? live.hourly : c.hourly.map((x) => ({ h: x.h, t: x.t, kind: (c.night ? 'moon' : 'cloud') as Kind, text: '' }));
+    const z = zoned(d, offset);
+    const night = nightAt(z.hh);
+    return { name: c.name, offset, z, hours, temp: live ? live.temp : c.temp, hi: live ? live.hi : c.hi, lo: live ? live.lo : c.lo, text: live ? live.text : c.text, kind: (live ? live.kind : night ? 'moon' : 'cloud') as Kind, night, sample: !live };
   };
 
-  function timeline(name: string, offset: number, jk: { hh: number; mm: number }) {
-    const pct = (hrs: number) => `${(hrs / 24) * 100}%`;
-    const start = (9 - (offset - WIB) + 24) % 24; const end = start + 8;
-    const common = [Math.max(9, start), Math.min(17, end)];
-    const seg = (a: number, b: number, bg: string) => h('i', { class: 'tseg', style: `left:${pct(a)};width:${pct(b - a)};background:${bg}` });
-    const nowAt = jk.hh + jk.mm / 60;
-    const row = (top: number, label: string, bold: boolean, ...segs: HTMLElement[]) => h('div', { class: `row${bold ? ' bold' : ''}`, style: `top:${top}px` }, h('label', {}, label), h('div', { class: 'lane' }, ...segs));
-    const overlapLabel = `${hm({ hh: Math.floor(common[0]), mm: 0 })}–${hm({ hh: Math.floor(common[1]), mm: 0 })} WIB (${hm({ hh: Math.floor((common[0] + offset - WIB + 24) % 24), mm: 0 })}–${hm({ hh: Math.floor((common[1] + offset - WIB + 24) % 24), mm: 0 })} di ${name})`;
-    cardMessage = `${name} ${Math.abs(offset - WIB)} jam lebih ${offset > WIB ? 'cepat' : 'lambat'}. Jam kerja kalian bertemu ${overlapLabel}.`;
-    return h('div', {}, h('h3', {}, 'Jam kerja bersama', h('span', {}, 'jam kerja 09.00–17.00 di masing-masing kota, ditampilkan dalam WIB')),
+  const card = (el: HTMLElement, who: { name: string; z: ReturnType<typeof zoned>; hours: Hour[]; temp: number; hi: number; lo: number; text: string; kind: Kind; night: boolean }, chip: HTMLElement) => {
+    el.replaceChildren(
+      h('div', { class: 'top' }, who.name, chip),
+      h('div', { class: 'daypart' }, icon(who.night ? 'moon' : 'sun', 17, 1.8), daypart(who.z.hh)),
+      h('div', { class: 'big' }, hm(who.z)),
+      h('div', { class: 'date' }, `${dayName(who.z.dow)}, ${who.z.day} ${monthName(who.z.m)}`),
+      h('div', { class: 'wx' }, h('i', { class: who.kind === 'moon' || who.kind === 'partlyNight' ? 'moon' : '' }, icon(kindIcon(who.kind), 38, 1.6)), `${who.temp}°`),
+      h('div', { class: 'wxs' }, `${who.text} · ${who.hi}° / ${who.lo}°`), h('hr'), hourly(who.hours));
+  };
+
+  const buildHome = () => {
+    const w = weather.get(); const z = zoned(d, homeOffset());
+    card(left, { name: w.city, z, hours: w.hourly, temp: w.temp, hi: w.hi, lo: w.lo, text: w.text, kind: w.kind, night: nightAt(z.hh) }, h('span', { class: 'chip' }, 'Kamu di sini'));
+  };
+  const buildRight = () => {
+    const c = cityData(active);
+    card(right, c, h('span', { class: 'chip blue' }, `${deltaLabel(c.offset)}${deltaLabel(c.offset) === 'Sama' ? '' : ''}`));
+    overlapCard.replaceChildren(timeline(c.name, c.offset));
+  };
+
+  function segs(startH: number, lenH: number, bg: string) {
+    const out: HTMLElement[] = []; const s0 = ((startH % 24) + 24) % 24; const e0 = s0 + lenH;
+    const mk = (a: number, b: number) => h('i', { class: 'tseg', style: `left:${(a / 24) * 100}%;width:${((b - a) / 24) * 100}%;background:${bg}` });
+    if (e0 <= 24) out.push(mk(s0, e0)); else { out.push(mk(s0, 24)); out.push(mk(0, e0 - 24)); }
+    return out;
+  }
+
+  function timeline(name: string, offset: number) {
+    const H = homeOffset(); const diff = offset - H; const hz = zoneLabel();
+    const homeStart = 9; const otherStart = ((9 - diff) % 24 + 24) % 24;     // other city's 09.00 expressed in home time
+    const lo = Math.max(homeStart, otherStart); const hi = Math.min(17, otherStart + 8);
+    const overlap = hi > lo ? [lo, hi] : null;
+    const j = zoned(d, H); const nowAt = j.hh + j.mm / 60;
+    const fmtH = (x: number) => hm({ hh: Math.floor(x) % 24, mm: Math.round((x % 1) * 60) });
+    const label = overlap ? `${fmtH(overlap[0])}–${fmtH(overlap[1])} ${hz} (${fmtH(overlap[0] + diff + 24)}–${fmtH(overlap[1] + diff + 24)} di ${name})` : '';
+    const dd = Math.abs(diff);
+    cardMessage = diff === 0 ? `${name} satu zona waktu denganmu.`
+      : `${name} ${dd} jam lebih ${diff > 0 ? 'cepat' : 'lambat'}. ${overlap ? `Jam kerja kalian bertemu ${label}.` : 'Jam kerja kalian tidak bertemu hari ini.'}`;
+    const row = (top: number, lbl: string, bold: boolean, ...sg: HTMLElement[]) => h('div', { class: `row${bold ? ' bold' : ''}`, style: `top:${top}px` }, h('label', {}, lbl), h('div', { class: 'lane' }, ...sg));
+    return h('div', {}, h('h3', {}, 'Jam kerja bersama', h('span', {}, `jam kerja 09.00–17.00 di masing-masing kota, ditampilkan dalam ${hz}`)),
       h('div', { class: 'tl' },
-        row(0, 'Jakarta', false, seg(9, 17, '#a8a9ac')), row(36, name, false, seg(start > end - 24 ? start : start, Math.min(24, end), '#8ea8e0')), row(72, 'Bersama', true, seg(common[0], common[1], '#1f7f6a')),
+        row(0, weather.get().city, false, ...segs(homeStart, 8, '#a8a9ac')), row(36, name, false, ...segs(otherStart, 8, '#8ea8e0')),
+        row(72, 'Bersama', true, ...(overlap ? segs(overlap[0], overlap[1] - overlap[0], '#1f7f6a') : [])),
         h('i', { class: 'now', style: `left:calc(104px + (100% - 104px) * ${nowAt / 24})` }),
         h('div', { class: 'axis' }, ...[0, 6, 12, 18, 24].map((n) => h('span', { style: `left:${(n / 24) * 100}%` }, String(n))))));
   }
-  let cardMessage = '';
 
-  const tabs = h('div', { class: 'tabs', role: 'tablist' }, ...['syd', 'cfx'].map((id) => h('button', { role: 'tab', 'aria-selected': String(id === active), onClick: async (e: Event) => {
-    active = id; [...tabs.children].forEach((b) => b.setAttribute('aria-selected', String(b === e.currentTarget)));
-    right.animate([{ opacity: 1 }, { opacity: 0.0, transform: 'translateY(6px)' }], { duration: 120, easing: EASE_IN }).finished.then(() => { build(); right.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: EASE_OUT }); refreshMini(); });
-  } }, other(id).name)));
+  const tabs = h('div', { class: 'tabs', role: 'tablist' }, ...['syd', 'cfx'].map((id) => h('button', { role: 'tab', 'aria-selected': String(id === active), onClick: (e: Event) => {
+    active = id; [...tabs.children].forEach((bt) => bt.setAttribute('aria-selected', String(bt === e.currentTarget)));
+    right.animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(6px)' }], { duration: 120, easing: EASE_IN }).finished.then(() => { buildRight(); right.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: EASE_OUT }); refreshMini(); });
+  } }, CITIES.find((c) => c.id === id)!.name)));
 
-  const left = h('div', { class: 'ccard' },
-    h('div', { class: 'top' }, 'Jakarta', h('span', { class: 'chip' }, 'Kamu di sini')),
-    h('div', { class: 'daypart' }, icon('sun', 17, 1.8), 'Siang'),
-    h('div', { class: 'big' }, hm(zoned(d, WIB))),
-    h('div', { class: 'date' }, `${dayName(zoned(d, WIB).dow)}, ${zoned(d, WIB).day} ${monthName(zoned(d, WIB).m)}`),
-    h('div', { class: 'wx' }, icon('rain', 38, 1.6), `${j.temp}°`),
-    h('div', { class: 'wxs' }, `${j.text} · ${j.hi}° / ${j.lo}°`), h('hr'),
-    hourly(j.hourly.map((x, i) => ({ ...x, k: i < 3 ? 'drizzle' : 'cloud' })), false));
-  build();
-
-  const wrapMini = h('div');
+  buildHome(); buildRight();
   let miniEl: HTMLElement = mini(cardMessage, { label: 'Jadwalkan meeting', onClick: () => undefined });
-  wrapMini.append(miniEl);
   function refreshMini() { const n = mini(cardMessage, { label: 'Jadwalkan meeting', onClick: () => undefined }); miniEl.replaceWith(n); miniEl = n; }
+
+  // live Sydney: fetched once per 20 minutes, panel redraws when it lands
+  const stop: (() => void)[] = [];
+  for (const [id, [lat, lon]] of Object.entries(COORDS)) {
+    const hit = remote.get(id);
+    if (!DEMO && (!hit || Date.now() - hit.at > 20 * 60_000)) fetchForecast(lat, lon).then((fc) => { remote.set(id, { at: Date.now(), fc }); if (active === id) buildRight(); }).catch(() => undefined);
+  }
+  stop.push(weather.on(() => buildHome()));
 
   const el = h('section', { class: 'panel wc', 'aria-label': 'Jam dunia' },
     h('div', { class: 'bar' }, h('h2', {}, 'Jam dunia'), tabs, h('i', { class: 'grow' }), tuneBtn(), closeBtn(onClose)),
     h('div', { class: 'cities' }, left, right), overlapCard, miniEl);
-  return { el, mini: miniEl };
+  return { el, mini: miniEl, destroy: () => stop.forEach((f) => f()) };
 }
 
 /* --------------------------------------------------------------- calendar */
 export function calendarPanel(onClose: () => void): Panel {
-  const t = zoned(now(), WIB);
+  const t = zoned(now(), homeOffset());
   let view = { y: t.y, m: t.m };
   let selected = t.day; let sel: { y: number; m: number } = { y: t.y, m: t.m };
   const title = h('h2'); const wkh = h('div', { class: 'wkh' }, ...['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((x) => h('span', {}, x)));
@@ -197,4 +229,4 @@ export function calendarPanel(onClose: () => void): Panel {
   return { el, mini: m };
 }
 
-export { sleep, EASE_IO, dayShort };
+export { sleep, EASE_IO };

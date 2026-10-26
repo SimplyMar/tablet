@@ -13,7 +13,8 @@ import { timerActions, breakTimer } from '../lib/timer';
 import { ask, type Intent, type Reply } from '../aino/brain';
 import { loadPrefs } from '../aino/settings';
 import { canListen, listen, speak, stopSpeaking, setVolume, mediaControl, isNative } from '../native/bridge';
-import { greeting, now, WIB, zoned } from '../lib/time';
+import { greeting, now, homeOffset, zoned } from '../lib/time';
+import { setAwake, isAwake } from '../native/awake';
 
 export type PanelName = 'music' | 'clock' | 'calendar' | 'chat' | 'settings' | 'apps' | 'notifs';
 
@@ -26,6 +27,8 @@ export function createDashboard(root: HTMLElement) {
       if (a === 'apps') void openPanel('apps'); else if (a === 'bell') void openPanel('notifs'); else if (a === 'settings') void openPanel('settings');
       else if (a === 'volume') popover('volume'); else popover('more');
     },
+    awake: isAwake(),
+    onAwake: (on) => { void setAwake(on); say(on ? 'Layar akan tetap menyala selama aplikasi terbuka.' : 'Layar boleh redup dan mati sendiri.', 3200); },
   });
   const weather = createWeather();
   const pill = createNowPill({ onOpen: () => void openPanel('music') });
@@ -50,7 +53,7 @@ export function createDashboard(root: HTMLElement) {
   let panel: { name: PanelName; p: Panel } | null = null;
   let talking = false;
 
-  const who = () => `${greeting(zoned(now(), WIB).hh)}, ${loadPrefs().name}`;
+  const who = () => `${greeting(zoned(now(), homeOffset()).hh)}, ${loadPrefs().name}`;
   hero.showHeadline(0);
   hero.startRotation();
   setInterval(() => { Object.values(sets).flat().forEach((c) => c.update?.()); topbar.refresh(); }, 15_000);
@@ -83,6 +86,8 @@ export function createDashboard(root: HTMLElement) {
     if (next === 'home') hero.startRotation();
     const out = [...grid.children].map((c) => (c as HTMLElement).animate([{ opacity: 1, transform: 'none', filter: 'blur(0)' }, { opacity: 0, transform: 'scale(0.985)', filter: 'blur(5px)' }], { duration: 150, easing: EASE_IN, fill: 'forwards' }));
     await Promise.all(out.map((a) => a.finished.catch(() => undefined)));
+    // the fade-out filled forwards; drop it or reused cards stay invisible when the mode comes back
+    out.forEach((a) => a.cancel());
     mode = next;
     grid.dataset.mode = next;
     grid.replaceChildren(...sets[next].map((c) => c.el));
@@ -145,6 +150,7 @@ export function createDashboard(root: HTMLElement) {
     await leave.finished.catch(() => undefined);
     p.destroy?.();
     p.el.remove();
+    home.getAnimations().forEach((a) => a.cancel());
     if (mode === 'home') { hero.startRotation(); hero.say(who(), MODE_LINE.home, { big: true, hold: 2400 }); }
     busy = false;
   }

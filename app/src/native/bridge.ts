@@ -1,6 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
-export type NowPlaying = { active: boolean; title: string; artist: string; playing: boolean; position: number; duration: number; app: string; artBase64?: string };
+export type NowPlaying = { debug?: string; active: boolean; title: string; artist: string; playing: boolean; position: number; duration: number; app: string; artBase64?: string };
 
 interface AinoNativePlugin {
   getSecret(o: { key: string }): Promise<{ value: string | null }>;
@@ -13,7 +13,9 @@ interface AinoNativePlugin {
   nowPlaying(): Promise<NowPlaying>;
   mediaControl(o: { action: 'play' | 'pause' | 'toggle' | 'next' | 'previous' | 'seek'; position?: number }): Promise<void>;
   setVolume(o: { delta?: number; level?: number }): Promise<{ level: number }>;
-  hasNotificationAccess(): Promise<{ granted: boolean }>;
+  hasNotificationAccess(): Promise<{ granted: boolean; connected: boolean }>;
+  openAppSettings(): Promise<void>;
+  setKeepAwake(o: { enabled: boolean }): Promise<void>;
   openNotificationAccessSettings(): Promise<void>;
   openApp(o: { pkg: string }): Promise<void>;
   addListener(event: 'nowPlaying', cb: (s: NowPlaying) => void): Promise<{ remove: () => void }>;
@@ -73,7 +75,9 @@ export async function stopSpeaking() { if (native) await native.stopSpeaking(); 
 export const nowPlaying = () => native?.nowPlaying() ?? Promise.resolve<NowPlaying | null>(null);
 export const mediaControl = (action: 'play' | 'pause' | 'toggle' | 'next' | 'previous' | 'seek', position?: number) => native?.mediaControl({ action, position });
 export const setVolume = (o: { delta?: number; level?: number }) => native?.setVolume(o) ?? Promise.resolve(null);
-export const hasNotificationAccess = () => native?.hasNotificationAccess().then((r) => r.granted) ?? Promise.resolve(false);
+export const notificationStatus = () => native?.hasNotificationAccess() ?? Promise.resolve({ granted: false, connected: false });
+export const openAppSettings = () => native?.openAppSettings();
+export const setKeepAwakeNative = (enabled: boolean) => native?.setKeepAwake({ enabled });
 export const openNotificationAccessSettings = () => native?.openNotificationAccessSettings();
 export const openApp = (pkg: string) => native?.openApp({ pkg });
 export async function onNowPlaying(cb: (s: NowPlaying) => void) { if (native) await native.addListener('nowPlaying', cb); }

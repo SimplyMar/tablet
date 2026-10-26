@@ -3,8 +3,10 @@ import { icon, filled, type IconName } from '../lib/icons';
 import { artUrl } from './art';
 import { player, playerActions, fmt } from '../lib/player';
 import { EVENTS, WORK_DECK } from '../data/mock';
-import { dayName, dayShort, hm, monthShort, monthName, now, WIB, zoned } from '../lib/time';
+import { dayName, dayShort, hm, monthShort, monthName, now, homeOffset, zoned } from '../lib/time';
 import type { Card } from './cards';
+import { weather, kindIcon } from '../lib/weather';
+import { deltaLabel } from '../lib/time';
 
 function card(name: string, cls: string, ...kids: (Node | null)[]) {
   return h('section', { class: `card ${cls}`, 'data-card': name }, h('div', { class: 'content' }, ...kids));
@@ -19,14 +21,19 @@ export function navCard(): Card {
 
 export function wideClockCard(): Card {
   const big = h('div', { class: 'big' }); const date = h('div', { class: 'date' }); const syd = h('div', { class: 'syd' });
-  const el = card('clock', 'wclock', h('div', { class: 'city' }, 'Jakarta'), h('div', { class: 'wx' }, icon('cloud', 18, 1.8), h('b', {}, '29°'), h('span', {}, 'Gerimis')), big, date, syd);
+  const city = h('div', { class: 'city' }); const wx = h('div', { class: 'wx' });
+  const el = card('clock', 'wclock', city, wx, big, date, syd);
   const update = () => {
-    const j = zoned(now(), WIB); const s = zoned(now(), 11);
+    const j = zoned(now(), homeOffset()); const s = zoned(now(), 11);
     big.textContent = hm(j);
     date.textContent = `${dayName(j.dow)}, ${j.day} ${monthName(j.m)}`;
-    syd.replaceChildren(icon('moon', 15, 2), h('span', {}, 'Sydney'), h('b', {}, hm(s)), h('em', {}, '+4 j'), h('i', { class: 'grow' }), h('span', {}, '21°'));
+    const night = s.hh < 6 || s.hh >= 18;
+    syd.replaceChildren(icon(night ? 'moon' : 'sun', 15, 2), h('span', {}, 'Sydney'), h('b', {}, hm(s)), h('em', {}, deltaLabel(11, 'j')));
+    const w = weather.get();
+    city.textContent = w.city;
+    wx.replaceChildren(icon(kindIcon(w.kind), 18, 1.8), h('b', {}, `${w.temp}°`), h('span', {}, w.text));
   };
-  update();
+  update(); weather.on(update);
   return { el, update };
 }
 
@@ -35,7 +42,7 @@ export function weekCard(): Card {
   const el = card('week', 'weekc', h('div', { class: 'label' }, 'Minggu ini'), range, days,
     h('div', { class: 'nextev' }, h('i'), h('span', {}, 'Sel 27 · Seharian · Send Aquaria Invoice')));
   const update = () => {
-    const t = zoned(now(), WIB);
+    const t = zoned(now(), homeOffset());
     const mondayOffset = (t.dow + 6) % 7;
     const base = Date.UTC(t.y, t.m, t.day - mondayOffset);
     const mon = new Date(base); const sun = new Date(base + 6 * 86400000);

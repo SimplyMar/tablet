@@ -190,10 +190,13 @@ public class AinoNativePlugin extends Plugin {
         } catch (SecurityException e) { return null; }
     }
 
+    private boolean registered = false;
+    private final MediaSessionManager.OnActiveSessionsChangedListener sessionsChanged = controllers -> { rewatch(); pushNowPlaying(); };
+
     private void watchSessions() {
         if (sessions == null || !hasAccess()) return;
         try {
-            sessions.addOnActiveSessionsChangedListener(controllers -> { rewatch(); pushNowPlaying(); }, listener());
+            if (!registered) { sessions.addOnActiveSessionsChangedListener(sessionsChanged, listener()); registered = true; }
             rewatch();
         } catch (SecurityException ignored) {}
     }
@@ -204,13 +207,32 @@ public class AinoNativePlugin extends Plugin {
         if (watched != null) watched.registerCallback(watchCallback, main);
     }
 
+    private static String text(MediaMetadata m, String... keys) {
+        if (m == null) return "";
+        for (String k : keys) { CharSequence v = m.getText(k); if (v != null && v.length() > 0) return v.toString(); }
+        return "";
+    }
+
+    private String debugSessions() {
+        if (!hasAccess()) return "akses notifikasi belum diberikan";
+        if (!AinoNotificationListener.connected) return "akses diberikan, layanan belum tersambung";
+        try {
+            List<MediaController> list = sessions.getActiveSessions(listener());
+            if (list.isEmpty()) return "tersambung, tetapi tidak ada sesi media aktif";
+            StringBuilder b = new StringBuilder(list.size() + " sesi: ");
+            for (MediaController c : list) b.append(c.getPackageName()).append(' ');
+            return b.toString().trim();
+        } catch (SecurityException e) { return "ditolak sistem (SecurityException)"; }
+    }
+
     private JSObject describe(MediaController c) {
         JSObject o = new JSObject();
-        if (c == null) { o.put("active", false); return o; }
+        if (c == null) { o.put("active", false); o.put("debug", debugSessions()); return o; }
         MediaMetadata m = c.getMetadata(); PlaybackState s = c.getPlaybackState();
         o.put("active", m != null);
-        o.put("title", m == null ? "" : String.valueOf(m.getText(MediaMetadata.METADATA_KEY_TITLE)));
-        o.put("artist", m == null ? "" : String.valueOf(m.getText(MediaMetadata.METADATA_KEY_ARTIST)));
+        o.put("debug", "ok: " + c.getPackageName());
+        o.put("title", text(m, MediaMetadata.METADATA_KEY_TITLE, MediaMetadata.METADATA_KEY_DISPLAY_TITLE));
+        o.put("artist", text(m, MediaMetadata.METADATA_KEY_ARTIST, MediaMetadata.METADATA_KEY_ALBUM_ARTIST, MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE));
         o.put("playing", s != null && s.getState() == PlaybackState.STATE_PLAYING);
         o.put("position", s == null ? 0 : s.getPosition() / 1000.0);
         o.put("duration", m == null ? 0 : m.getLong(MediaMetadata.METADATA_KEY_DURATION) / 1000.0);
@@ -273,9 +295,31 @@ public class AinoNativePlugin extends Plugin {
 
     @PluginMethod
     public void hasNotificationAccess(PluginCall call) {
-        JSObject r = new JSObject(); r.put("granted", hasAccess());
-        if (hasAccess()) main.post(this::watchSessions);
+        boolean granted = hasAccess();
+        if (granted && !AinoNotificationListener.connected) AinoNotificationListener.rebind(getContext());
+        if (granted) main.post(this::watchSessions);
+        JSObject r = new JSObject();
+        r.put("granted", granted);
+        r.put("connected", granted && AinoNotificationListener.connected);
         call.resolve(r);
+    }
+
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + getContext().getPackageName()));
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(i);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void setKeepAwake(PluginCall call) {
+        final boolean on = Boolean.TRUE.equals(call.getBoolean("enabled", true));
+        getActivity().runOnUiThread(() -> {
+            if (on) getActivity().getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            call.resolve();
+        });
     }
 
     @PluginMethod
