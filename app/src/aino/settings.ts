@@ -4,6 +4,14 @@ import { getSecret, setSecret, removeSecret } from '../native/bridge';
 export const DEFAULT_MODEL = 'gemini-3.6-flash';
 const PREFS_VERSION = 2;
 
+/** Models offered in Settings. Lite models have their own, looser free-tier quota. */
+export const MODELS: { id: string; label: string; hint: string }[] = [
+  { id: 'gemini-3.6-flash', label: '3.6 Flash', hint: 'Paling pintar' },
+  { id: 'gemini-3.5-flash', label: '3.5 Flash', hint: 'Seimbang' },
+  { id: 'gemini-3.5-flash-lite', label: '3.5 Flash Lite', hint: 'Cepat, kuota longgar' },
+  { id: 'gemini-3.1-flash-lite', label: '3.1 Flash Lite', hint: 'Hemat, kuota longgar' },
+];
+
 export type Prefs = { name: string; model: string; speak: boolean; awake: boolean; prefsV?: number };
 const DEFAULTS: Prefs = { name: 'isni', model: DEFAULT_MODEL, speak: true, awake: true };
 

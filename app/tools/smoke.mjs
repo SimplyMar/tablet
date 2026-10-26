@@ -154,6 +154,23 @@ await page.evaluate(() => localStorage.removeItem('aino.good'));
 await page.fill('.chatin', 'tes level berpikir'); await page.press('.chatin', 'Enter'); await sleep(1500);
 check('minimal thinking refused: retried with low', (await page.locator('.msg.aino').last().textContent()) === 'Jawaban setelah turun level.' && lv.join() === 'minimal,low', lv.join());
 
+// settings model picker: four Gemini choices, saved on tap, used by the next question
+await page.click('.chat button[aria-label="Tutup"]'); await sleep(1100);
+await page.evaluate(() => localStorage.setItem('aino.prefs', JSON.stringify({ model: 'gemini-3.6-flash', prefsV: 2 })));
+await page.click('button[aria-label="Pengaturan"]'); await sleep(900);
+const labels = await page.locator('.mopt b').allTextContents();
+check('model picker lists the four models', labels.join() === '3.6 Flash,3.5 Flash,3.5 Flash Lite,3.1 Flash Lite', labels.join());
+await page.click('.mopt:has-text("3.5 Flash Lite")'); await sleep(300);
+check('picking a model saves it', (await page.evaluate(() => JSON.parse(localStorage.getItem('aino.prefs')).model)) === 'gemini-3.5-flash-lite');
+check('only the chosen model is marked', (await page.locator('.mopt[aria-checked="true"]').count()) === 1 && (await page.locator('.mopt[aria-checked="true"]').textContent()).includes('3.5 Flash Lite'));
+await page.screenshot({ path: process.env.SHOT_SETTINGS || '/tmp/settings-models.png' });
+const urls = []; page.on('request', (r) => { const m = r.url().match(/models\/([^:?]+):generateContent/); if (m) urls.push(m[1]); });
+await page.click('.settings button[aria-label="Tutup"]'); await sleep(1100);
+await page.click('button[aria-label="Obrolan dengan Aino"]'); await sleep(900);
+await page.evaluate(() => localStorage.removeItem('aino.good'));
+await page.fill('.chatin', 'tes pilihan model'); await page.press('.chatin', 'Enter'); await sleep(1500);
+check('next question uses the picked model', urls[0] === 'gemini-3.5-flash-lite', urls.join());
+
 for (let i = errors.length - 1; i >= 0; i--) if (/status of (400|404|503)/.test(errors[i])) errors.splice(i, 1); // the stubbed retired-model response
 check('no console or page errors', errors.length === 0, errors.join(' | '));
 await browser.close();

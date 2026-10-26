@@ -1,7 +1,7 @@
 import { h } from '../lib/h';
 import { icon, type IconName } from '../lib/icons';
 import { EASE_OUT, EASE_IN } from '../lib/motion';
-import { DEFAULT_MODEL, loadPrefs, savePrefs, getGeminiKey, setGeminiKey, clearGeminiKey } from '../aino/settings';
+import { MODELS, loadPrefs, savePrefs, getGeminiKey, setGeminiKey, clearGeminiKey } from '../aino/settings';
 import { ask, resetHistory, type Reply } from '../aino/brain';
 import { canListen, isNative, listen, nowPlaying, notificationStatus, openApp, openAppSettings, openNotificationAccessSettings, speak, stopSpeaking } from '../native/bridge';
 import { weather, refreshWeather, savePlace, searchPlaces } from '../lib/weather';
@@ -55,7 +55,12 @@ export function settingsPanel(onClose: () => void): Panel {
   const status = h('div', { class: 'status' });
   const key = h('input', { class: 'field', type: 'password', placeholder: 'Tempel kunci dari Google AI Studio', autocomplete: 'off', spellcheck: 'false' }) as HTMLInputElement;
   const show = h('button', { class: 'cbtn small', 'aria-label': 'Tampilkan kunci', onClick: () => { key.type = key.type === 'password' ? 'text' : 'password'; } }, icon('eye', 18, 1.8));
-  const model = h('input', { class: 'field', type: 'text', value: prefs.model, spellcheck: 'false' }) as HTMLInputElement;
+  const options = MODELS.some((m) => m.id === prefs.model) ? MODELS : [...MODELS, { id: prefs.model, label: prefs.model.replace(/^gemini-/, ''), hint: 'Pilihan lama' }];
+  const picks = options.map((m) => h('button', { class: 'mopt', role: 'radio', 'aria-checked': String(m.id === prefs.model), onClick: () => {
+    savePrefs({ model: m.id });
+    picks.forEach((b, i) => b.setAttribute('aria-checked', String(options[i].id === m.id)));
+  } }, h('b', {}, m.label), h('span', {}, m.hint)));
+  const model = h('div', { class: 'models', role: 'radiogroup', 'aria-label': 'Model Gemini' }, ...picks);
   const name = h('input', { class: 'field', type: 'text', value: prefs.name, maxlength: '24' }) as HTMLInputElement;
   const voice = h('button', { class: 'switch', role: 'switch', 'aria-checked': String(prefs.speak), onClick: () => { const v = voice.getAttribute('aria-checked') !== 'true'; voice.setAttribute('aria-checked', String(v)); savePrefs({ speak: v }); } }, h('i'));
   const access = h('div', { class: 'status' });
@@ -91,7 +96,7 @@ export function settingsPanel(onClose: () => void): Panel {
 
   const save = h('button', { class: 'pill-dark', onClick: async () => {
     if (key.value.trim()) { await setGeminiKey(key.value); key.value = ''; }
-    savePrefs({ model: model.value.trim() || DEFAULT_MODEL, name: name.value.trim() || 'isni' });
+    savePrefs({ name: name.value.trim() || 'isni' });
     await refreshKey(); save.textContent = 'Tersimpan'; setTimeout(() => (save.textContent = 'Simpan'), 1400);
   } }, 'Simpan');
   const clear = h('button', { class: 'pill-ghost', onClick: async () => { await clearGeminiKey(); await refreshKey(); } }, 'Hapus kunci');
@@ -127,10 +132,10 @@ export function settingsPanel(onClose: () => void): Panel {
       h('div', { class: 'scard' }, h('h3', {}, 'Aino'),
         row('Nama panggilan', 'Dipakai Aino untuk menyapamu.', name),
         h('div', { class: 'srow col' }, h('div', {}, h('b', {}, 'Kunci Gemini'), h('span', {}, 'Dari aistudio.google.com/apikey. Disimpan terenkripsi di tablet ini, tidak pernah masuk ke git.')), h('div', { class: 'keyline' }, key, show), status),
-        row('Model', 'Nama model Gemini yang dipakai untuk menjawab.', model),
+        h('div', { class: 'srow col' }, h('div', {}, h('b', {}, 'Model Gemini'), h('span', {}, 'Kalau kuota habis atau Aino lambat, pilih model Lite: kuotanya terpisah dan lebih longgar. Pilihan langsung tersimpan.')), model),
         row('Suara Aino', 'Bacakan jawaban dengan suara.', voice),
         h('div', { class: 'actions' }, clear, save)),
-      h('div', { class: 'scard' }, h('h3', {}, 'Tentang'), h('div', { class: 'srow' }, h('div', {}, h('b', {}, 'Aino Dash'), h('span', {}, 'Versi 0.2 · dasbor tablet landscape')), h('span', { class: 'ver' }, 'id.simplymar.tablet')))));
+      h('div', { class: 'scard' }, h('h3', {}, 'Tentang'), h('div', { class: 'srow' }, h('div', {}, h('b', {}, 'Aino Dash'), h('span', {}, 'Versi 0.2.4 · dasbor tablet landscape')), h('span', { class: 'ver' }, 'id.simplymar.tablet')))));
   void refreshKey(); void refreshAccess(); refreshWhere();
   return { el, mini: h('div'), destroy: () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVis); offW(); } };
 }
