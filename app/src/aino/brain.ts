@@ -66,7 +66,7 @@ export class GeminiError extends Error { constructor(public status: number, msg:
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const TIMEOUT_MS = 12000;
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 4;
 
 async function request(url: string, key: string, body?: unknown): Promise<{ status: number; data: unknown }> {
   const headers = { 'Content-Type': 'application/json', 'x-goog-api-key': key };
@@ -95,17 +95,22 @@ const isGone = (e: GeminiError) => e.status === 404 || /no longer available|not 
 /** Worth trying another model: retired, overloaded, rate limited or too slow. */
 const canSwitch = (e: GeminiError) => isGone(e) || e.status === 0 || e.status === 429 || e.status >= 500;
 
-/** Plain "flash" models this key can call, newest first (gemini-3.8-flash, gemini-3.7-flash, ...). */
-async function discoverModels(key: string): Promise<string[]> {
+/**
+ * Fallback candidates this key can call: plain flash models nearest the preferred version first (3.6 -> 3.5, 3.7, 3.8),
+ * then the flash-lite models, which have their own quota. Newest first when the preferred model has no version.
+ */
+async function discoverModels(key: string, pref: string): Promise<string[]> {
   const { status, data } = await request(`${API}/models?pageSize=200`, key);
   if (status < 200 || status >= 300) return [];
   const list = (data as { models?: { name?: string; supportedGenerationMethods?: string[] }[] } | null)?.models ?? [];
-  const ver = (id: string) => (id.match(/^gemini-(\d+(?:\.\d+)?)-flash$/)?.[1] ?? '');
-  return list
-    .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
-    .map((m) => (m.name ?? '').replace(/^models\//, ''))
-    .filter((id) => ver(id))
-    .sort((a, b) => parseFloat(ver(b)) - parseFloat(ver(a)));
+  const ids = list.filter((m) => m.supportedGenerationMethods?.includes('generateContent')).map((m) => (m.name ?? '').replace(/^models\//, ''));
+  const ver = (id: string, re: RegExp) => parseFloat(id.match(re)?.[1] ?? '');
+  const FLASH = /^gemini-(\d+(?:\.\d+)?)-flash$/; const LITE = /^gemini-(\d+(?:\.\d+)?)-flash-lite$/;
+  const want = ver(pref, /^gemini-(\d+(?:\.\d+)?)/);
+  const dist = (id: string) => (Number.isNaN(want) ? -ver(id, FLASH) : Math.abs(ver(id, FLASH) - want) + (ver(id, FLASH) > want ? 0.001 : 0));
+  const flash = ids.filter((id) => FLASH.test(id)).sort((x, y) => dist(x) - dist(y));
+  const lite = ids.filter((id) => LITE.test(id)).sort((x, y) => ver(y, LITE) - ver(x, LITE));
+  return [...flash, ...lite];
 }
 
 /** A fallback that worked recently, so an overloaded favourite does not cost 12 s on every question. */
@@ -151,7 +156,7 @@ async function callGemini(text: string): Promise<string> {
     } catch (e) {
       if (!(e instanceof GeminiError) || !canSwitch(e)) throw e;
       last = e;
-      if (!looked) { looked = true; queue.push(...(await discoverModels(key).catch(() => []))); }
+      if (!looked) { looked = true; queue.push(...(await discoverModels(key, pref).catch(() => []))); }
     }
   }
   throw last ?? new GeminiError(0, 'timeout');

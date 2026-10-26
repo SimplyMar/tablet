@@ -1,8 +1,10 @@
 import { getSecret, setSecret, removeSecret } from '../native/bridge';
 
-export const DEFAULT_MODEL = 'gemini-3.8-flash';
+// 3.6 answers fast and accepts minimal thinking; 3.7 and 3.8 were overloaded when this was chosen. The app still falls back to newer ones.
+export const DEFAULT_MODEL = 'gemini-3.6-flash';
+const PREFS_VERSION = 2;
 
-export type Prefs = { name: string; model: string; speak: boolean; awake: boolean };
+export type Prefs = { name: string; model: string; speak: boolean; awake: boolean; prefsV?: number };
 const DEFAULTS: Prefs = { name: 'isni', model: DEFAULT_MODEL, speak: true, awake: true };
 
 export function loadPrefs(): Prefs {
@@ -10,11 +12,13 @@ export function loadPrefs(): Prefs {
     const p: Prefs = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('aino.prefs') ?? '{}') };
     // Google retired the 2.x flash models for new keys; move old saved choices to the current default.
     if (/^gemini-[12]\./.test(p.model)) p.model = DEFAULT_MODEL;
+    // 0.2.1 saved the then-default 3.7/3.8 into prefs; move those once, but keep a later deliberate choice.
+    if (p.prefsV !== PREFS_VERSION && /^gemini-3\.[78]-flash$/.test(p.model)) p.model = DEFAULT_MODEL;
     return p;
   } catch { return { ...DEFAULTS }; }
 }
 export function savePrefs(p: Partial<Prefs>) {
-  const next = { ...loadPrefs(), ...p };
+  const next = { ...loadPrefs(), ...p, prefsV: PREFS_VERSION };
   try { localStorage.setItem('aino.prefs', JSON.stringify(next)); } catch { /* ignore */ }
   return next;
 }

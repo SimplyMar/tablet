@@ -102,25 +102,30 @@ await page.route('https://generativelanguage.googleapis.com/**', async (route) =
   const u = route.request().url();
   if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
   if (u.includes('/models?')) return route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ models: [
-    { name: 'models/gemini-3.8-flash', supportedGenerationMethods: ['generateContent'] },
-    { name: 'models/gemini-3.8-flash-lite', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-3.6-flash', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-3.6-flash-lite', supportedGenerationMethods: ['generateContent'] },
     { name: 'models/gemini-3.5-flash', supportedGenerationMethods: ['generateContent'] },
     { name: 'models/gemini-embedding-001', supportedGenerationMethods: ['embedContent'] }] }) });
   const m = u.match(/models\/([^:]+):generateContent/)[1]; tried.push(m);
-  if (m !== 'gemini-3.8-flash') return route.fulfill({ status: 404, contentType: 'application/json', headers: cors, body: JSON.stringify({ error: { message: `This model models/${m} is no longer available to new users.` } }) });
+  if (m !== 'gemini-3.6-flash') return route.fulfill({ status: 404, contentType: 'application/json', headers: cors, body: JSON.stringify({ error: { message: `This model models/${m} is no longer available to new users.` } }) });
   return route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Jawaban dari model baru.' }] } }] }) });
 });
 await page.evaluate(() => localStorage.setItem('aino.prefs', JSON.stringify({ model: 'gemini-2.5-flash' })));
 await page.fill('.chatin', 'ceritakan kisah pertama'); await page.press('.chatin', 'Enter'); await sleep(1500);
-check('old saved 2.x model migrates to the default', tried.join() === 'gemini-3.8-flash', tried.join());
+check('old saved 2.x model migrates to the default', tried.join() === 'gemini-3.6-flash', tried.join());
+tried.length = 0;
+await page.evaluate(() => localStorage.setItem('aino.prefs', JSON.stringify({ model: 'gemini-3.8-flash' })));
+await page.fill('.chatin', 'ceritakan kisah kedua'); await page.press('.chatin', 'Enter'); await sleep(1500);
+check('0.2.1 saved 3.8 default migrates once to 3.6', tried.join() === 'gemini-3.6-flash', tried.join());
 tried.length = 0;
 await page.evaluate(() => localStorage.setItem('aino.prefs', JSON.stringify({ model: 'gemini-9.9-flash' })));
 await page.fill('.chatin', 'ceritakan kisah lain'); await page.press('.chatin', 'Enter'); await sleep(1500);
-check('retired model falls back to the live flash model', (await page.locator('.msg.aino').last().textContent()) === 'Jawaban dari model baru.' && tried.join() === 'gemini-9.9-flash,gemini-3.8-flash', tried.join());
-check('discovered model is remembered', (await page.evaluate(() => JSON.parse(localStorage.getItem('aino.prefs')).model)) === 'gemini-3.8-flash');
+check('retired model falls back to the live flash model', (await page.locator('.msg.aino').last().textContent()) === 'Jawaban dari model baru.' && tried.join() === 'gemini-9.9-flash,gemini-3.6-flash', tried.join());
+check('discovered model is remembered', (await page.evaluate(() => JSON.parse(localStorage.getItem('aino.prefs')).model)) === 'gemini-3.6-flash');
 
 // an overloaded favourite: 503 moves to the next flash model, thinking is kept minimal, and the working model sticks
 const seen2 = []; const bodies = [];
+await page.evaluate(() => { localStorage.setItem('aino.prefs', JSON.stringify({ model: 'gemini-3.8-flash', prefsV: 2 })); localStorage.removeItem('aino.good'); });
 await page.route('https://generativelanguage.googleapis.com/**', async (route) => {
   const u = route.request().url();
   if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
